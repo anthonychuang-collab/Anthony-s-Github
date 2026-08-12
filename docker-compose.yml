@@ -1,0 +1,22 @@
+# 一鍵啟動:  docker compose up -d
+# 停止:      docker compose down
+# 更新程式後重建: docker compose up -d --build
+services:
+  scheduling:
+    build: .
+    image: linedong-scheduling-system
+    container_name: linedong-scheduling
+    restart: unless-stopped
+    ports:
+      - "3000:3000"          # 左邊是對外的埠,想換就改左邊(例如 "8080:3000")
+    environment:
+      NODE_ENV: production
+      # ⚠ 一定要改成一串很長的隨機字!產生方法見 .env.example
+      JWT_SECRET: "請改成一串很長的隨機字串"
+      JWT_EXPIRES_IN: "30d"
+      DB_PATH: /app/data/scheduling.db
+    volumes:
+      - scheduling-data:/app/data   # 資料庫存在具名 volume,容器刪掉資料還在
+
+volumes:
+  scheduling-data:

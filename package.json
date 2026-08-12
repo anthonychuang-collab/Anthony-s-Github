@@ -1,0 +1,22 @@
+{
+  "name": "linedong-scheduling-system",
+  "version": "1.0.0",
+  "description": "線東大眾護理之家 機構排班系統 — 多人共用正式版 (Express + SQLite + JWT)",
+  "private": true,
+  "type": "commonjs",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tests/test_rotation.js && node tests/test_rest_interval.js && node tests/test_api.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
