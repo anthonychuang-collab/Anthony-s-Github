@@ -325,7 +325,7 @@
         <div class="db-table-wrap">
           <table class="db-table" id="builtinCodeTable"></table>
         </div>
-        <div class="hint" style="margin-top:0;">說明文字可以修改,方便你記錄實際時段或用途。「顏色」選「系統預設樣式」會維持原本的樣式(例如大夜的深底、兼職的斜紋、12小時支援的虛線框);選其他顏色的話,會改成單純的實色色塊,原本的特殊紋路/深底樣式會被取代,請自行評估要不要保留原本的視覺區分。</div>
+        <div class="hint" style="margin-top:0;">說明文字可以修改,方便你記錄實際時段或用途。「顏色」選「系統預設樣式」維持原樣;選其他顏色時,系統會「疊加」在原本的特殊樣式上、保留原本的視覺語意——大夜(N)仍是深色底、只把文字換成你選的顏色;兼職(Dp/Ep)仍是斜紋、只換斜紋色相;12小時支援(D8/2D8/3D8/E8)仍保留虛線外框、只換底色。一般代碼則呈現為你選的實色色塊。</div>
 
         <h3 style="margin-top:22px;">自訂班別代碼(可自行新增,選擇顯示顏色)</h3>
         <div class="hint" style="margin-top:0;">用於系統內建9種以外、你們機構自己額外定義的班別代碼。新增後,這個代碼會出現在排班格子的自動完成建議清單裡,並套用你選的顏色。</div>
@@ -523,6 +523,8 @@ let cellClipboardValue = null;
 let isDragSelecting = false;
 let dragAnchor = null;
 let selRange = null; // {r1,c1,r2,c2} normalized so r1<=r2, c1<=c2
+let selAnchor = null; // {row,col} 鍵盤擴充選取時固定不動的那一角
+let selCursor = null; // {row,col} 鍵盤擴充選取時會移動的那一角
 let undoStack = [];
 let users = [];
 let currentUser = null; // in-memory only, resets on reload (no persistent session by design)
@@ -1643,6 +1645,26 @@ function codeClass(code){
   if(code==='R2') return 'leave-company';
   return 'empty';
 }
+// 內建代碼「自訂顏色」採疊加而非取代：保留原本的特殊視覺語意
+//  - N 大夜：保留深色底,把選的顏色當文字色
+//  - Dp/Ep 兼職:保留斜紋,把斜紋色相換成選的顏色
+//  - D8/2D8/3D8/E8 12小時支援:保留虛線外框,底色換成選的顏色
+//  - 其餘代碼:單純的實色色塊
+function builtinTintStyle(code, isNursing, important){
+  const c = eventColor(builtinCodeColors[code]);
+  const bang = important ? ' !important' : '';
+  const nat = isNursing ? codeClass(code) : '';
+  if(/\bnight\b/.test(nat)){
+    return `background:var(--ink)${bang};color:${c.bg}${bang};`;
+  }
+  if(/\bparttime\b/.test(nat)){
+    return `background:repeating-linear-gradient(135deg, ${c.bg}, ${c.bg} 5px, #fff 5px, #fff 10px)${bang};color:${c.fg}${bang};font-style:italic;`;
+  }
+  if(/\bext12\b/.test(nat)){
+    return `background:${c.bg}${bang};color:${c.fg}${bang};border:2px dashed rgba(0,0,0,.28)${bang};`;
+  }
+  return `background:${c.bg}${bang};color:${c.fg}${bang};`;
+}
 function customCodeInfo(code){
   return customShiftCodes.find(c=>c.code===code) || null;
 }
@@ -1694,8 +1716,7 @@ async function renderGrid(){
   function cellStyleFor(val){
     if(!val) return {cls:'empty', style:''};
     if(builtinCodeColors[val]){
-      const c = eventColor(builtinCodeColors[val]);
-      return {cls:'custom-code', style:`background:${c.bg} !important;color:${c.fg} !important;`};
+      return {cls:'custom-code', style: builtinTintStyle(val, isNursing, true)};
     }
     const custom = customCodeInfo(val);
     if(custom){
@@ -1853,11 +1874,14 @@ async function renderGrid(){
       isDragSelecting = true;
       const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
       dragAnchor = {row:r, col:c};
+      selAnchor = {row:r, col:c};
+      selCursor = {row:r, col:c};
       setSelRange(r, c, r, c);
     });
     cell.addEventListener('mouseenter', ()=>{
       if(!isDragSelecting || !dragAnchor) return;
       const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+      selCursor = {row:r, col:c};
       setSelRange(dragAnchor.row, dragAnchor.col, r, c);
     });
     cell.onclick = async function(){
@@ -2039,8 +2063,7 @@ function renderCodeRefStrip(){
 
   function styleFor(code){
     if(builtinCodeColors[code]){
-      const col = eventColor(builtinCodeColors[code]);
-      return `background:${col.bg};color:${col.fg};`;
+      return builtinTintStyle(code, isNursing, false);
     }
     if(isNursing){
       const custom = customShiftCodes.find(c=>c.code===code);
@@ -2422,8 +2445,50 @@ async function runHealthCheck(){
           weekends.push({sat: null, sun: isRestCode(codes[day-1])});
         }
       }
-      if(p.weekendPref==='w1' && weekends.some(w=> !(w.sat||w.sun))) addResult('weekend_pref', `週末需求「六日至少休一天」未被滿足`, p.name, `本月`, p);
-      if(p.weekendPref==='w5' && weekends.some(w=> w.sat===false || w.sun===false)) addResult('weekend_pref', `週末需求「六日都休息」未被滿足`, p.name, `本月`, p);
+      // 全月每日是否休假(給 w3/w4 判斷連休用)
+      const restOn = {};
+      for(let day=1; day<=nDays; day++) restOn[day] = isRestCode(codes[day-1]);
+      // 完整六日連休(六、日都休)的週末數,給 w2 用
+      const fullRestWeekends = weekends.filter(w=> w.sat===true && w.sun===true).length;
+
+      if(p.weekendPref==='w1' && weekends.some(w=> !(w.sat||w.sun)))
+        addResult('weekend_pref', `週末需求「六日至少休一天」未被滿足`, p.name, `本月`, p);
+
+      if(p.weekendPref==='w5' && weekends.some(w=> w.sat===false || w.sun===false))
+        addResult('weekend_pref', `週末需求「六日都休息」未被滿足`, p.name, `本月`, p);
+
+      if(p.weekendPref==='w2'){
+        if(fullRestWeekends===0)
+          addResult('weekend_pref', `週末需求「每月至少一次六日連休」未被滿足(本月沒有任何一個完整的六日連休)`, p.name, `本月`, p);
+        else if(fullRestWeekends>=2)
+          addResult('weekend_pref', `週末需求「其餘週末至少上一天」未被滿足(本月有 ${fullRestWeekends} 個週末六日皆休,超過希望的一次)`, p.name, `本月`, p);
+      }
+
+      if(p.weekendPref==='w3'){
+        // 找出「孤立單日休假」:當天休假,但前一天與後一天都不是休假
+        const isolated = [];
+        for(let day=1; day<=nDays; day++){
+          if(!restOn[day]) continue;
+          const prevRest = day>1 && restOn[day-1];
+          const nextRest = day<nDays && restOn[day+1];
+          if(!prevRest && !nextRest) isolated.push(day);
+        }
+        if(isolated.length)
+          addResult('weekend_pref', `休假偏好「希望兩日連休」未被滿足(有 ${isolated.length} 天單日休假沒有連著另一天:${isolated.map(d=>d+'號').join('、')})`, p.name, `本月`, p);
+      }
+
+      if(p.weekendPref==='w4'){
+        // 找出「連續兩天(含)以上的休假」
+        const runs = [];
+        let start=null;
+        for(let day=1; day<=nDays+1; day++){
+          const r = (day<=nDays) && restOn[day];
+          if(r && start===null) start=day;
+          else if(!r && start!==null){ if((day-1) - start >= 1) runs.push([start, day-1]); start=null; }
+        }
+        if(runs.length)
+          addResult('weekend_pref', `休假偏好「不要安排連休」未被滿足(有連續休假:${runs.map(r=>r[0]+'–'+r[1]+'號').join('、')})`, p.name, `本月`, p);
+      }
     }
 
     if(leaveReq[p.id]!==undefined){
@@ -2587,6 +2652,8 @@ function setSelRange(r1, c1, r2, c2){
 }
 function clearSelRange(){
   selRange = null;
+  selAnchor = null;
+  selCursor = null;
   document.querySelectorAll('.shift-cell.multi-selected').forEach(el=> el.classList.remove('multi-selected'));
 }
 function applySelHighlight(){
@@ -2690,6 +2757,34 @@ document.addEventListener('keydown', (e)=>{
     if(!inAnyInput){ e.preventDefault(); deleteSelectedRange(); return; }
   }
   if(e.key==='Escape' && selRange){ clearSelRange(); return; }
+
+  // Shift+方向鍵:用鍵盤擴充選取範圍(Excel 式)
+  if(e.shiftKey && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+    const active0 = document.activeElement;
+    const inAnyInput0 = active0 && (active0.tagName==='INPUT' || active0.tagName==='SELECT');
+    if(inAnyInput0) return; // 正在編輯儲存格/後台欄位時不攔截方向鍵
+    if(!canEditRole(currentRole)) return;
+    const items = staff[currentRole] || [];
+    const maxRow = items.length - 1;
+    const maxCol = daysInMonth(monthCursor);
+    if(maxRow < 0) return;
+    // 還沒有任何選取時,從左上角(第一位同仁、1號)開始
+    if(!selAnchor || !selCursor){
+      selAnchor = {row:0, col:1};
+      selCursor = {row:0, col:1};
+    }
+    let row = selCursor.row, col = selCursor.col;
+    if(e.key==='ArrowUp') row = Math.max(0, row-1);
+    else if(e.key==='ArrowDown') row = Math.min(maxRow, row+1);
+    else if(e.key==='ArrowLeft') col = Math.max(1, col-1);
+    else if(e.key==='ArrowRight') col = Math.min(maxCol, col+1);
+    selCursor = {row, col};
+    setSelRange(selAnchor.row, selAnchor.col, row, col);
+    const el = document.querySelector(`#scheduleTable .shift-cell[data-row="${row}"][data-col="${col}"]`);
+    if(el && el.scrollIntoView) el.scrollIntoView({block:'nearest', inline:'nearest'});
+    e.preventDefault();
+    return;
+  }
 
   const isCtrl = e.ctrlKey || e.metaKey;
   if(!isCtrl) return;
