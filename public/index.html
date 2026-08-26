@@ -134,6 +134,15 @@
   .shift-cell.leave-reserved{background:#4C86C6 !important;color:#000;font-weight:900;}
   .shift-cell.leave-company{background:#1F6B3A !important;color:#000;font-weight:900;}
   .shift-cell.custom-code{font-weight:800;}
+  .shift-cell.multi-selected{outline:2px solid var(--ink);outline-offset:-2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);}
+
+  .code-ref-strip{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;padding:12px;background:var(--bg-paper);border-radius:10px;}
+  .code-ref-chip{
+    min-width:34px;height:30px;padding:0 8px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:12px;cursor:pointer;border:1px solid rgba(0,0,0,.08);user-select:none;
+  }
+  .code-ref-chip:hover{filter:brightness(0.95);transform:translateY(-1px);}
+  .code-ref-chip:active{transform:translateY(0);}
   .shift-cell select{width:100%;height:100%;border:none;background:transparent;font-size:10.5px;font-weight:800;text-align:center;text-align-last:center;}
 
   tr.summary-row td.name-cell{font-size:10px;font-weight:700;color:var(--muted);background:#F0F2E9;}
@@ -280,6 +289,8 @@
         <table class="schedule" id="scheduleTable"></table>
       </div>
       <div class="legend" id="legendArea"></div>
+      <div class="hint" style="margin-top:10px;margin-bottom:0;">下面是所有可用代碼,點一下就複製,選好儲存格範圍後直接點代碼可以整塊套用;沒有選範圍的話,點代碼後再去點/選一格用 Ctrl+V 貼上。拖曳可以選取多個儲存格,選好按 Delete/Backspace 可以整塊清空。</div>
+      <div class="code-ref-strip" id="codeRefStrip"></div>
     </div>
 
     <div class="panel" id="healthCheckPanel" style="display:none;">
@@ -310,11 +321,11 @@
       </div>
 
       <div class="panel" id="tab-shiftcodes" style="display:none;">
-        <h3>系統內建班別代碼(固定樣式,顏色不可調整,避免破壞既有視覺意義)</h3>
+        <h3>系統內建班別代碼(說明文字與顏色皆可自訂)</h3>
         <div class="db-table-wrap">
           <table class="db-table" id="builtinCodeTable"></table>
         </div>
-        <div class="hint" style="margin-top:0;">說明文字可以修改,方便你記錄實際時段或用途;代碼本身與顏色是系統固定的,不會因為改說明而變動。</div>
+        <div class="hint" style="margin-top:0;">說明文字可以修改,方便你記錄實際時段或用途。「顏色」選「系統預設樣式」會維持原本的樣式(例如大夜的深底、兼職的斜紋、12小時支援的虛線框);選其他顏色的話,會改成單純的實色色塊,原本的特殊紋路/深底樣式會被取代,請自行評估要不要保留原本的視覺區分。</div>
 
         <h3 style="margin-top:22px;">自訂班別代碼(可自行新增,選擇顯示顏色)</h3>
         <div class="hint" style="margin-top:0;">用於系統內建9種以外、你們機構自己額外定義的班別代碼。新增後,這個代碼會出現在排班格子的自動完成建議清單裡,並套用你選的顏色。</div>
@@ -468,6 +479,7 @@ let specialDays = [];
 let recurringRules = [];
 let leaveReqCache = {};
 let builtinCodeLabels = {};
+let builtinCodeColors = {};
 let customShiftCodes = [];
 let scheduleRules = [];
 let solutionLibrary = [];
@@ -508,6 +520,9 @@ const BUILTIN_CODES = [
   {code:'R2', label:'機構排定休假(公司安排的休假日)'},
 ];
 let cellClipboardValue = null;
+let isDragSelecting = false;
+let dragAnchor = null;
+let selRange = null; // {r1,c1,r2,c2} normalized so r1<=r2, c1<=c2
 let undoStack = [];
 let users = [];
 let currentUser = null; // in-memory only, resets on reload (no persistent session by design)
@@ -545,6 +560,7 @@ async function loadAll(){
   try{const s=await window.storage.get('special-days', true); if(s&&s.value) specialDays=JSON.parse(s.value);}catch(e){}
   try{const s=await window.storage.get('recurring-rules', true); if(s&&s.value) recurringRules=JSON.parse(s.value);}catch(e){}
   try{const s=await window.storage.get('builtin-code-labels', true); if(s&&s.value) builtinCodeLabels=JSON.parse(s.value);}catch(e){}
+  try{const s=await window.storage.get('builtin-code-colors', true); if(s&&s.value) builtinCodeColors=JSON.parse(s.value);}catch(e){}
   try{const s=await window.storage.get('custom-shift-codes', true); if(s&&s.value) customShiftCodes=JSON.parse(s.value);}catch(e){}
   try{const s=await window.storage.get('schedule-rules', true); if(s&&s.value) scheduleRules=JSON.parse(s.value);}catch(e){}
   try{const s=await window.storage.get('solution-library', true); if(s&&s.value) solutionLibrary=JSON.parse(s.value);}catch(e){}
@@ -567,6 +583,10 @@ async function saveRecurringRules(){
 async function saveBuiltinLabels(){
   const ok = await storageSetRetry('builtin-code-labels', JSON.stringify(builtinCodeLabels));
   if(!ok) showToast('⚠ 儲存班別說明失敗,請稍後再試一次');
+}
+async function saveBuiltinColors(){
+  const ok = await storageSetRetry('builtin-code-colors', JSON.stringify(builtinCodeColors));
+  if(!ok) showToast('⚠ 儲存班別顏色失敗,請稍後再試一次');
 }
 async function saveCustomCodes(){
   const ok = await storageSetRetry('custom-shift-codes', JSON.stringify(customShiftCodes));
@@ -993,8 +1013,9 @@ document.getElementById('dbSave').onclick = async ()=>{
 /* ---------- Admin: 班別代碼維護 ---------- */
 function renderBuiltinCodeTable(){
   const table = document.getElementById('builtinCodeTable');
-  table.innerHTML = `<thead><tr><th style="width:70px;">代碼</th><th>說明</th></tr></thead><tbody></tbody>`;
+  table.innerHTML = `<thead><tr><th style="width:70px;">代碼</th><th>說明</th><th style="width:150px;">顏色</th></tr></thead><tbody></tbody>`;
   const tbody = table.tBodies[0];
+  const selectStyle = 'width:100%;border:none;padding:6px 8px;font-size:12px;font-family:inherit;background:transparent;';
   BUILTIN_CODES.forEach((c, idx)=>{
     const tr = document.createElement('tr');
     const td0 = document.createElement('td');
@@ -1007,14 +1028,36 @@ function renderBuiltinCodeTable(){
     inp.value = builtinCodeLabels[c.code] !== undefined ? builtinCodeLabels[c.code] : c.label;
     td1.appendChild(inp);
     tr.appendChild(td1);
+
+    const td2 = document.createElement('td');
+    const sel = document.createElement('select');
+    sel.dataset.colorCode = c.code; sel.style.cssText = selectStyle;
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = ''; defaultOpt.textContent = '系統預設樣式';
+    sel.appendChild(defaultOpt);
+    EVENT_COLORS.forEach(o=>{
+      const opt = document.createElement('option'); opt.value=o.v; opt.textContent=o.t;
+      if(builtinCodeColors[c.code]===o.v) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    td2.appendChild(sel);
+    tr.appendChild(td2);
+
     tbody.appendChild(tr);
   });
 }
 document.getElementById('builtinCodeTable').addEventListener('change', async (e)=>{
-  if(e.target.tagName!=='INPUT') return;
-  builtinCodeLabels[e.target.dataset.code] = e.target.value.trim();
-  await saveBuiltinLabels();
-  showToast('已更新說明');
+  if(e.target.tagName==='INPUT'){
+    builtinCodeLabels[e.target.dataset.code] = e.target.value.trim();
+    await saveBuiltinLabels();
+    showToast('已更新說明');
+  } else if(e.target.tagName==='SELECT'){
+    const code = e.target.dataset.colorCode;
+    const val = e.target.value;
+    if(val==='') delete builtinCodeColors[code]; else builtinCodeColors[code] = val;
+    await saveBuiltinColors();
+    showToast('已更新顏色,回到班表檢視即可看到效果');
+  }
 });
 
 function ccColumns(){ return ['代碼','說明','顏色']; }
@@ -1650,6 +1693,10 @@ async function renderGrid(){
   }
   function cellStyleFor(val){
     if(!val) return {cls:'empty', style:''};
+    if(builtinCodeColors[val]){
+      const c = eventColor(builtinCodeColors[val]);
+      return {cls:'custom-code', style:`background:${c.bg} !important;color:${c.fg} !important;`};
+    }
     const custom = customCodeInfo(val);
     if(custom){
       const c = eventColor(custom.color);
@@ -1800,9 +1847,23 @@ async function renderGrid(){
   }
 
   table.querySelectorAll('.shift-cell').forEach(cell=>{
+    cell.addEventListener('mousedown', (e)=>{
+      if(cell.querySelector('input')) return;
+      if(!canEditRole(currentRole)) return;
+      isDragSelecting = true;
+      const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+      dragAnchor = {row:r, col:c};
+      setSelRange(r, c, r, c);
+    });
+    cell.addEventListener('mouseenter', ()=>{
+      if(!isDragSelecting || !dragAnchor) return;
+      const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+      setSelRange(dragAnchor.row, dragAnchor.col, r, c);
+    });
     cell.onclick = async function(){
       if(this.querySelector('input')) return;
       if(!canEditRole(currentRole)){ showToast('您的帳號對這個職務只有檢視權限,無法編輯'); return; }
+      clearSelRange();
       const cellEl = this;
       const sid = this.dataset.staff, ds = this.dataset.date;
       const row = this.dataset.row, col = this.dataset.col;
@@ -1962,10 +2023,67 @@ document.getElementById('slApplyBtn').onclick = async ()=>{
 };
 
 function render(){
-  renderTabs(); renderGrid();
+  renderTabs(); renderGrid(); renderCodeRefStrip();
   if(document.getElementById('leaveStaffSelect')) updateLeavePanel();
   document.getElementById('monthLabel').textContent = `${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
 }
+
+function renderCodeRefStrip(){
+  const strip = document.getElementById('codeRefStrip');
+  if(!strip) return;
+  const isNursing = currentRole==='nursing';
+  let codes = isNursing
+    ? ['Di','2Di','3Di','D8','2D8','3D8','E','E8','N','Dp','Ep','休','/','R1','R2']
+    : ['早','中','晚','休','/','R1','R2'];
+  customShiftCodes.forEach(c=>{ if(c.code && !codes.includes(c.code)) codes.push(c.code); });
+
+  function styleFor(code){
+    if(builtinCodeColors[code]){
+      const col = eventColor(builtinCodeColors[code]);
+      return `background:${col.bg};color:${col.fg};`;
+    }
+    if(isNursing){
+      const custom = customShiftCodes.find(c=>c.code===code);
+      if(custom){ const col = eventColor(custom.color); return `background:${col.bg};color:${col.fg};`; }
+      const cls = codeClass(code);
+      return classToInlineStyle(cls);
+    } else {
+      const cls = code==='早'?'white':code==='中'?'evening':code==='晚'?'admin-shift':code==='休'?'off':code==='/'?'blankshift':(code==='R1'||code==='R')?'leave-reserved':code==='R2'?'leave-company':'empty';
+      return classToInlineStyle(cls);
+    }
+  }
+  function classToInlineStyle(cls){
+    const map = {
+      'white':'background:var(--primary-soft);color:var(--primary-deep);',
+      'admin-shift':'background:#EDEDE6;color:#8A8F80;',
+      'evening':'background:var(--amber-soft);color:var(--amber-deep);',
+      'night':'background:var(--ink);color:var(--amber-soft);',
+      'parttime':'background:repeating-linear-gradient(135deg,#EFEEE7,#EFEEE7 4px,#fff 4px,#fff 8px);color:var(--brown);',
+      'off':'background:var(--off);color:#8A9280;',
+      'blankshift':'background:#F4F4EF;color:#B7BEB0;',
+      'leave-reserved':'background:#4C86C6;color:#000;',
+      'leave-company':'background:#1F6B3A;color:#000;',
+      'empty':'background:#F0F0EC;color:#999;',
+    };
+    let base = cls.split(' ')[0];
+    return map[base] || map['empty'];
+  }
+
+  strip.innerHTML = codes.map(code=>`<div class="code-ref-chip" style="${styleFor(code)}" data-code="${code}" title="點一下複製「${code}」">${displayCode(code)==='R'?code:displayCode(code)}</div>`).join('');
+  strip.querySelectorAll('.code-ref-chip').forEach(chip=>{
+    chip.onclick = ()=>{
+      const code = chip.dataset.code;
+      cellClipboardValue = code;
+      try{ navigator.clipboard && navigator.clipboard.writeText(code); }catch(e){}
+      if(selRange){
+        fillSelectedRangeWithMatrix([[code]]);
+      } else {
+        showToast(`已複製「${code}」,點一個儲存格後按 Ctrl+V 貼上,或先拖曳選取範圍再點這裡`);
+      }
+    };
+  });
+}
+
 
 document.getElementById('roleTabs').addEventListener('click', (e)=>{
   const tab = e.target.closest('.role-tab'); if(!tab) return;
@@ -2030,86 +2148,92 @@ async function autoScheduleNursing(){
     const wd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day).getDay();
     return p.weekendPref==='w5' && (wd===0||wd===6);
   }
+  function restCountSoFar(p){
+    let n=0;
+    for(let day=1; day<=nDays; day++){ if(!isEmpty(p,day) && isRestCode(getCode(p,day))) n++; }
+    return n;
+  }
 
-  // Step 1: classify pure-white rotation staff by this month's category
+  // ---- Pass A: rotation-tracked pure-white staff get their fixed 2Di/3Di slot ----
   const rotationStaff = items.filter(isPureWhiteRotationStaff);
-  const regulars = {};
-  const floaters = [];
+  const regulars = {};   // '2Di'/'3Di' -> staff (the person fixed to that floor this month)
+  const rotationFloaters = [];
   rotationStaff.forEach(p=>{
     const cat = rotationCategoryForMonth(p, monthCursor);
-    if(cat==='2Di' || cat==='3Di'){ if(!regulars[cat]) regulars[cat]=p; else log.push(`${cat} 這個月有兩位以上同仁輪調起始設定衝突到同一格,已用「${regulars[cat].name}」,「${p.name}」需要你手動安排`); }
-    else if(cat==='float') floaters.push(p);
-    else if(cat===null) log.push(`${p.name} 有勾選三個月輪調,但輪調起始月份/班別尚未設定,這個人本月沒有被自動排班`);
+    if(cat==='2Di' || cat==='3Di'){
+      if(!regulars[cat]) regulars[cat]=p;
+      else log.push(`${cat} 這個月有兩位以上同仁輪調起始設定衝突到同一格,已用「${regulars[cat].name}」,「${p.name}」需要你手動安排`);
+    } else if(cat==='float'){
+      rotationFloaters.push(p);
+    } else if(cat===null){
+      log.push(`${p.name} 有勾選三個月輪調,但輪調起始月份/班別尚未設定,這個人本月沒有被自動排班`);
+    }
   });
 
-  // Step 2: fill 2Di/3Di regulars
   ['2Di','3Di'].forEach(cat=>{
     const p = regulars[cat];
-    if(!p){ log.push(`本月沒有同仁輪到「${cat}」固定班,這個位置需要你手動安排`); return; }
-    let restDays=0;
-    for(let day=1; day<=nDays; day++){ if(!isEmpty(p,day) && isRestCode(getCode(p,day))) restDays++; }
+    if(!p){ log.push(`本月沒有同仁固定輪到「${cat}」,如果沒有其他白班同仁可以補位,這個位置會需要你手動安排`); return; }
     for(let day=1; day<=nDays; day++){
       if(!isEmpty(p, day)) continue;
       const streak = consecutiveStreakBefore(p, day);
       const remainingDays = nDays - day + 1;
-      const remainingRestNeeded = Math.max(0, defaultMonthlyRest - restDays);
+      const remainingRestNeeded = Math.max(0, defaultMonthlyRest - restCountSoFar(p));
       let shouldRest = false;
       if(streak >= maxConsec) shouldRest = true;
       else if(weekendForcesRest(p, day)) shouldRest = true;
       else if(remainingRestNeeded >= remainingDays) shouldRest = true;
       else if(remainingRestNeeded > 0 && streak>=2 && Math.random() < (remainingRestNeeded/remainingDays)) shouldRest = true;
 
-      if(shouldRest){ setCode(p, day, '休'); restDays++; }
+      if(shouldRest){ setCode(p, day, '休'); }
       else if(restIntervalOk(p, day, cat)){ setCode(p, day, cat); }
-      else { setCode(p, day, '休'); restDays++; }
+      else { setCode(p, day, '休'); }
     }
   });
 
-  // Step 3: floaters cover 2Di/3Di gaps, else rest up to quota then Di
-  floaters.forEach(p=>{
-    let restDays=0;
-    for(let day=1; day<=nDays; day++){ if(!isEmpty(p,day) && isRestCode(getCode(p,day))) restDays++; }
-    for(let day=1; day<=nDays; day++){
-      if(!isEmpty(p, day)) continue;
-      const streak = consecutiveStreakBefore(p, day);
-      let needCat = null;
-      ['2Di','3Di'].forEach(cat=>{ const reg=regulars[cat]; if(reg && isRestCode(getCode(reg, day))) needCat = needCat || cat; });
-      if(needCat && streak < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, needCat)){
-        setCode(p, day, needCat);
-      } else if(restDays < defaultMonthlyRest){
-        setCode(p, day, '休'); restDays++;
-      } else {
-        setCode(p, day, 'Di');
-      }
-    }
-  });
-
-  // Step 4: non-rotation nursing staff — fill E/N coverage first (fewer eligible people, higher priority)
-  const others = items.filter(p=> !isPureWhiteRotationStaff(p));
-  const eCount = {}, nCount = {};
-  others.forEach(p=>{ eCount[p.id]=0; nCount[p.id]=0; });
+  // ---- Pass B: everyone else who can help cover 白班/小夜/大夜 gaps ----
+  // 這裡是修正的重點:之前只有「輪調中的貼班同仁」會去補白班缺口,
+  // 導致「有白班資格但沒設定輪調」的同仁完全沒被排進 2Di/3Di,只會拿到休假。
+  // 現在改成:所有還沒被排班別的白班資格同仁(貼班同仁 + 一般白班同仁)都納入同一個補位池,
+  // 小夜/大夜資格的同仁也納入補位池去補小夜/大夜缺口。
+  const floorFillPool = items.filter(p=> p.eligWhite && p!==regulars['2Di'] && p!==regulars['3Di']);
+  const eveningPool = items.filter(p=> p.eligEvening);
+  const nightPool = items.filter(p=> p.eligNight);
+  const floorCount = {}, eCount = {}, nCount = {};
+  items.forEach(p=>{ floorCount[p.id]=0; eCount[p.id]=0; nCount[p.id]=0; });
 
   for(let day=1; day<=nDays; day++){
-    const dayHasE = others.some(p=> ['E','E8','Ep'].includes(getCode(p, day)));
+    // 白班樓層缺口(2Di / 3Di 當天沒有人covering)
+    ['2Di','3Di'].forEach(cat=>{
+      const covered = items.some(p=> getCode(p, day)===cat || getCode(p, day)===(cat==='2Di'?'2D8':'3D8'));
+      if(covered) return;
+      const candidates = floorFillPool.filter(p=> isEmpty(p, day) && consecutiveStreakBefore(p, day) < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, cat));
+      candidates.sort((a,b)=> floorCount[a.id]-floorCount[b.id]);
+      if(candidates.length){ setCode(candidates[0], day, cat); floorCount[candidates[0].id]++; }
+      else log.push(`${monthCursor.getMonth()+1}/${day} 找不到人選可補 ${cat} 白班,需要你手動安排`);
+    });
+
+    // 小夜缺口
+    const dayHasE = items.some(p=> ['E','E8','Ep'].includes(getCode(p, day)));
     if(!dayHasE){
-      const candidates = others.filter(p=> p.eligEvening && isEmpty(p, day) && consecutiveStreakBefore(p, day) < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, 'E'));
+      const candidates = eveningPool.filter(p=> isEmpty(p, day) && consecutiveStreakBefore(p, day) < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, 'E'));
       candidates.sort((a,b)=> eCount[a.id]-eCount[b.id]);
       if(candidates.length){ setCode(candidates[0], day, 'E'); eCount[candidates[0].id]++; }
       else log.push(`${monthCursor.getMonth()+1}/${day} 找不到人選可排小夜(E),需要你手動安排`);
     }
-    const dayHasN = others.some(p=> ['N','E8'].includes(getCode(p, day)));
+
+    // 大夜缺口
+    const dayHasN = items.some(p=> ['N','E8'].includes(getCode(p, day)));
     if(!dayHasN){
-      const candidates = others.filter(p=> p.eligNight && isEmpty(p, day) && consecutiveStreakBefore(p, day) < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, 'N'));
+      const candidates = nightPool.filter(p=> isEmpty(p, day) && consecutiveStreakBefore(p, day) < maxConsec && !weekendForcesRest(p, day) && restIntervalOk(p, day, 'N'));
       candidates.sort((a,b)=> nCount[a.id]-nCount[b.id]);
       if(candidates.length){ setCode(candidates[0], day, 'N'); nCount[candidates[0].id]++; }
       else log.push(`${monthCursor.getMonth()+1}/${day} 找不到人選可排大夜(N),需要你手動安排`);
     }
   }
 
-  // Step 5: remaining empty days for non-rotation staff → rest up to quota, then Di if eligible, else rest
-  others.forEach(p=>{
-    let restDays = 0;
-    for(let day=1; day<=nDays; day++){ if(!isEmpty(p,day) && isRestCode(getCode(p,day))) restDays++; }
+  // ---- Pass C: 剩下還空著的格子 → 先休假湊到每月額度,滿了才排 Di(白班資格)或維持休假 ----
+  items.forEach(p=>{
+    let restDays = restCountSoFar(p);
     for(let day=1; day<=nDays; day++){
       if(!isEmpty(p, day)) continue;
       if(restDays < defaultMonthlyRest){ setCode(p, day, '休'); restDays++; }
@@ -2285,19 +2409,21 @@ async function runHealthCheck(){
     }
 
     if(currentRole==='nursing' && p.weekendPref){
-      const firstWd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1).getDay();
-      const weeks = {};
+      const weekends = [];
       for(let day=1; day<=nDays; day++){
         const wd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day).getDay();
-        if(wd===0||wd===6){
-          const wkKey = Math.ceil((day + firstWd) / 7);
-          if(!weeks[wkKey]) weeks[wkKey] = {};
-          weeks[wkKey][wd===6?'sat':'sun'] = isRestCode(codes[day-1]);
+        if(wd===6){
+          // 星期六一定配對「隔天」的星期日,這樣才會是同一個週末
+          const sunDay = day+1;
+          const sunRest = sunDay<=nDays ? isRestCode(codes[sunDay-1]) : null;
+          weekends.push({sat: isRestCode(codes[day-1]), sun: sunRest});
+        } else if(wd===0 && day===1){
+          // 當月第一天就是星期日,這個月沒有對應的星期六,單獨算一個週末
+          weekends.push({sat: null, sun: isRestCode(codes[day-1])});
         }
       }
-      const weekArr = Object.values(weeks);
-      if(p.weekendPref==='w1' && weekArr.some(w=> !(w.sat||w.sun))) addResult('weekend_pref', `週末需求「六日至少休一天」未被滿足`, p.name, `本月`, p);
-      if(p.weekendPref==='w5' && weekArr.some(w=> !(w.sat&&w.sun))) addResult('weekend_pref', `週末需求「六日都休息」未被滿足`, p.name, `本月`, p);
+      if(p.weekendPref==='w1' && weekends.some(w=> !(w.sat||w.sun))) addResult('weekend_pref', `週末需求「六日至少休一天」未被滿足`, p.name, `本月`, p);
+      if(p.weekendPref==='w5' && weekends.some(w=> w.sat===false || w.sun===false)) addResult('weekend_pref', `週末需求「六日都休息」未被滿足`, p.name, `本月`, p);
     }
 
     if(leaveReq[p.id]!==undefined){
@@ -2455,7 +2581,116 @@ ${tableHTML}
 
 let dbCellClipboardValue = null;
 let lastPasteEventTime = 0;
+function setSelRange(r1, c1, r2, c2){
+  selRange = {r1:Math.min(r1,r2), c1:Math.min(c1,c2), r2:Math.max(r1,r2), c2:Math.max(c1,c2)};
+  applySelHighlight();
+}
+function clearSelRange(){
+  selRange = null;
+  document.querySelectorAll('.shift-cell.multi-selected').forEach(el=> el.classList.remove('multi-selected'));
+}
+function applySelHighlight(){
+  document.querySelectorAll('.shift-cell.multi-selected').forEach(el=> el.classList.remove('multi-selected'));
+  if(!selRange) return;
+  const table = document.getElementById('scheduleTable');
+  if(!table) return;
+  for(let r=selRange.r1; r<=selRange.r2; r++){
+    for(let c=selRange.c1; c<=selRange.c2; c++){
+      const el = table.querySelector(`.shift-cell[data-row="${r}"][data-col="${c}"]`);
+      if(el) el.classList.add('multi-selected');
+    }
+  }
+}
+document.addEventListener('mouseup', ()=>{
+  isDragSelecting = false;
+  dragAnchor = null;
+});
+async function deleteSelectedRange(){
+  if(!selRange) return;
+  const items = staff[currentRole];
+  const monthData = await loadMonth();
+  let changed = 0;
+  for(let r=selRange.r1; r<=selRange.r2; r++){
+    const p = items[r];
+    if(!p) continue;
+    for(let c=selRange.c1; c<=selRange.c2; c++){
+      if(c<1 || c>daysInMonth(monthCursor)) continue;
+      const ds = dateStr(monthCursor, c);
+      const prevVal = (monthData[p.id] && monthData[p.id][ds]) || '';
+      if(prevVal===''){ continue; }
+      undoStack.push({monthKey: monthKey(monthCursor), sid:p.id, ds, prevVal});
+      if(undoStack.length>50) undoStack.shift();
+      delete monthData[p.id][ds];
+      changed++;
+    }
+  }
+  if(undoStack.length>50) undoStack = undoStack.slice(-50);
+  if(changed===0){ showToast('選取範圍內沒有可清除的內容'); return; }
+  await saveMonth();
+  renderGrid();
+  applySelHighlight();
+  showToast(`已清除 ${changed} 個儲存格`);
+}
+async function fillSelectedRangeWithMatrix(matrix){
+  if(!selRange) return;
+  const items = staff[currentRole];
+  const monthData = await loadMonth();
+  const nDaysLocal = daysInMonth(monthCursor);
+  let changed = 0;
+
+  const singleValue = (matrix.length===1 && matrix[0].length===1) ? matrix[0][0].trim() : null;
+
+  if(singleValue !== null){
+    for(let r=selRange.r1; r<=selRange.r2; r++){
+      const p = items[r]; if(!p) continue;
+      for(let c=selRange.c1; c<=selRange.c2; c++){
+        if(c<1 || c>nDaysLocal) continue;
+        const ds = dateStr(monthCursor, c);
+        const prevVal = (monthData[p.id] && monthData[p.id][ds]) || '';
+        if(prevVal !== singleValue){
+          undoStack.push({monthKey: monthKey(monthCursor), sid:p.id, ds, prevVal});
+          if(undoStack.length>50) undoStack.shift();
+        }
+        if(!monthData[p.id]) monthData[p.id] = {};
+        if(singleValue==='') delete monthData[p.id][ds]; else monthData[p.id][ds] = singleValue;
+        changed++;
+      }
+    }
+  } else {
+    matrix.forEach((rowVals, i)=>{
+      const r = selRange.r1 + i;
+      const p = items[r]; if(!p) return;
+      rowVals.forEach((val, j)=>{
+        const c = selRange.c1 + j;
+        if(c<1 || c>nDaysLocal) return;
+        const ds = dateStr(monthCursor, c);
+        const v = val.trim();
+        const prevVal = (monthData[p.id] && monthData[p.id][ds]) || '';
+        if(prevVal !== v){
+          undoStack.push({monthKey: monthKey(monthCursor), sid:p.id, ds, prevVal});
+          if(undoStack.length>50) undoStack.shift();
+        }
+        if(!monthData[p.id]) monthData[p.id] = {};
+        if(v==='') delete monthData[p.id][ds]; else monthData[p.id][ds] = v;
+        changed++;
+      });
+    });
+  }
+  await saveMonth();
+  renderGrid();
+  applySelHighlight();
+  showToast(`已貼上,共更新 ${changed} 個儲存格`);
+}
+
 document.addEventListener('keydown', (e)=>{
+  // Delete/Backspace clears a multi-cell selection (works without Ctrl)
+  if((e.key==='Delete' || e.key==='Backspace') && selRange){
+    const active = document.activeElement;
+    const inAnyInput = active && (active.tagName==='INPUT' || active.tagName==='SELECT');
+    if(!inAnyInput){ e.preventDefault(); deleteSelectedRange(); return; }
+  }
+  if(e.key==='Escape' && selRange){ clearSelRange(); return; }
+
   const isCtrl = e.ctrlKey || e.metaKey;
   if(!isCtrl) return;
   const key = e.key.toLowerCase();
@@ -2470,6 +2705,45 @@ document.addEventListener('keydown', (e)=>{
   const active = document.activeElement;
   const inShiftCell = active && active.tagName==='INPUT' && active.closest('.shift-cell');
   const inDbTable = active && (active.tagName==='INPUT' || active.tagName==='SELECT') && active.closest('.db-table');
+
+  if(!inShiftCell && !inDbTable && selRange){
+    if(key==='c'){
+      const items = staff[currentRole];
+      const rows = [];
+      for(let r=selRange.r1; r<=selRange.r2; r++){
+        const p = items[r]; if(!p) continue;
+        const rowVals = [];
+        for(let c=selRange.c1; c<=selRange.c2; c++){ rowVals.push(''); }
+        rows.push(rowVals);
+      }
+      loadMonth().then(monthData=>{
+        for(let ri=0, r=selRange.r1; r<=selRange.r2; r++, ri++){
+          const p = items[r]; if(!p) continue;
+          for(let ci=0, c=selRange.c1; c<=selRange.c2; c++, ci++){
+            const ds = dateStr(monthCursor, c);
+            rows[ri][ci] = (monthData[p.id] && monthData[p.id][ds]) || '';
+          }
+        }
+        const tsv = rows.map(r=>r.join('\t')).join('\n');
+        cellClipboardValue = tsv;
+        try{ navigator.clipboard && navigator.clipboard.writeText(tsv); }catch(err){}
+        showToast(`已複製 ${rows.length*(rows[0]?rows[0].length:0)} 個儲存格`);
+      });
+      return;
+    }
+    if(key==='v'){
+      e.preventDefault();
+      (async ()=>{
+        let text = null;
+        try{ text = await navigator.clipboard.readText(); }catch(err){ text = null; }
+        if(!text && cellClipboardValue!==null) text = cellClipboardValue;
+        if(!text){ showToast('無法讀取剪貼簿,請改成點單一儲存格後再貼上'); return; }
+        const matrix = text.replace(/\r/g,'').split('\n').filter((l,i,arr)=> !(i===arr.length-1 && l==='')).map(r=>r.split('\t'));
+        fillSelectedRangeWithMatrix(matrix);
+      })();
+      return;
+    }
+  }
 
   if(inShiftCell){
     if(key==='c'){ cellClipboardValue = active.value; }
