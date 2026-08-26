@@ -79,14 +79,14 @@
 
   .brand-banner{text-align:center;padding:20px 20px 14px;}
   .brand-banner img{height:48px;}
-  .brand-banner .sub{font-size:12px;color:var(--muted);letter-spacing:.1em;margin-top:6px;font-weight:600;}
+  .brand-banner .sub{font-size:12px;color:var(--brown);letter-spacing:.1em;margin-top:6px;font-weight:600;}
 
   .controlbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 16px;}
   .week-nav{display:flex;align-items:center;gap:10px;}
   .week-nav button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg-paper);cursor:pointer;font-size:14px;color:var(--primary-deep);font-weight:700;}
   .week-nav button:hover{border-color:var(--primary);}
   .week-label{font-weight:700;font-size:14.5px;min-width:100px;text-align:center;}
-  .auto-btn{border:none;border-radius:9px;background:var(--primary);color:#fff;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;}
+  .auto-btn{border:none;border-radius:11px;background:var(--primary);color:#fff;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;}
   .auto-btn:hover{background:var(--primary-deep);}
   #exportBtn:hover{background:#5c4630 !important;}
   .role-tabs{display:flex;gap:8px;margin-bottom:0;}
@@ -99,8 +99,9 @@
   .role-tab[data-role="admin"] .dot{background:var(--brown);}
   .role-tab[data-role="care"] .dot{background:var(--amber);}
 
-  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
-  .panel h3{margin:0 0 12px;font-size:13px;color:var(--muted);letter-spacing:.06em;font-weight:700;}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px;}
+  .panel h3{margin:0 0 12px;font-size:13px;color:var(--muted);letter-spacing:.06em;font-weight:700;display:flex;align-items:center;gap:7px;}
+  .panel h3::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--primary);flex:none;}
   .hint{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6;}
 
   .threshold-row{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;background:var(--bg-paper);border-radius:10px;padding:9px 14px;font-size:12.5px;color:var(--muted);}
@@ -149,12 +150,13 @@
   tr.summary-row td.count-cell{text-align:center;font-weight:800;font-size:11px;padding:4px 0;background:#F0F2E9;}
   tr.summary-row td.count-cell.ok{background:var(--primary-soft) !important;color:var(--primary-deep);}
   tr.summary-row td.count-cell.low{background:var(--danger-soft) !important;color:var(--danger);}
+  tr.summary-row td.count-cell.zero{background:var(--danger) !important;color:#fff !important;font-weight:900;}
 
   .legend{display:flex;gap:14px;margin-top:14px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;}
   .legend span{display:inline-flex;align-items:center;gap:6px;font-weight:500;}
   .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
   .empty-state{padding:30px 10px;text-align:center;color:var(--muted);font-size:13px;}
-  .brand-footer{height:12px;margin:32px -20px 0;background:linear-gradient(90deg,#8CC150 0%,#5AA94E 30%,#B6D37F 55%,#785D42 100%);opacity:.5;}
+  .brand-footer{height:14px;margin:32px -20px 0;background:linear-gradient(90deg,#8CC150 0%,#5AA94E 30%,#B6D37F 55%,#785D42 100%);opacity:.65;border-radius:0 0 4px 4px;}
   .footer-note{text-align:center;color:var(--muted);font-size:11px;padding:10px 0 24px;letter-spacing:.04em;}
 
   #printHeader{display:none;}
@@ -220,7 +222,7 @@
     <div id="loginFirstTimeHint" style="display:none;font-size:12px;color:var(--muted);margin-bottom:10px;">系統偵測到尚未建立任何帳號,請先設定第一個管理者帳號(將自動擁有完整權限)。</div>
     <input type="text" id="loginUsername" placeholder="帳號" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit;margin:6px 0;">
     <input type="password" id="loginPassword" placeholder="密碼" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit;margin:6px 0;">
-    <div><button id="loginSubmit" style="border:none;border-radius:9px;background:var(--ink);color:#fff;padding:10px 20px;font-weight:700;cursor:pointer;font-size:13px;margin-top:8px;">登入</button></div>
+    <div><button id="loginSubmit" style="border:none;border-radius:11px;background:var(--primary);color:#fff;padding:10px 20px;font-weight:700;cursor:pointer;font-size:13px;margin-top:8px;">登入</button></div>
     <div class="hint">帳號密碼由系統管理者於後台建立與管理。登入狀態僅保留在本次瀏覽期間,重新整理頁面需要再次登入。</div>
   </div>
 </div>
@@ -254,6 +256,8 @@
         <button class="auto-btn" id="autoScheduleBtn">⚡ 自動排班(草稿)</button>
         <button class="auto-btn" id="healthCheckBtn" style="background:#B5651D;">🩺 排班健檢</button>
         <button class="auto-btn" id="exportBtn" style="background:var(--brown);">⭳ 匯出 Excel</button>
+        <button class="auto-btn" id="importBtn" style="background:var(--amber-deep);">⭱ 匯入 Excel</button>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;">
         <button class="auto-btn" id="printBtn" style="background:#5C6B52;">🖨 列印班表(A4橫式)</button>
       </div>
     </div>
@@ -291,6 +295,17 @@
       <div class="legend" id="legendArea"></div>
       <div class="hint" style="margin-top:10px;margin-bottom:0;">下面是所有可用代碼,點一下就複製,選好儲存格範圍後直接點代碼可以整塊套用;沒有選範圍的話,點代碼後再去點/選一格用 Ctrl+V 貼上。拖曳可以選取多個儲存格,選好按 Delete/Backspace 可以整塊清空。</div>
       <div class="code-ref-strip" id="codeRefStrip"></div>
+    </div>
+
+    <div class="panel" id="importPreviewPanel" style="display:none;">
+      <h3>⭱ 匯入預覽</h3>
+      <div id="importSummary" style="font-size:12.5px;color:var(--muted);margin-bottom:10px;"></div>
+      <div id="importUnmatchedList" style="margin-bottom:12px;"></div>
+      <div class="hint" style="margin-top:0;">匯入只會覆蓋 Excel 檔案裡有值的儲存格,Excel 裡是空白的地方不會動到系統原本的資料。姓名比對不到的人不會被匯入,請先確認左側清單。</div>
+      <div class="db-actions" style="margin-top:10px;">
+        <button id="importConfirmBtn" style="background:var(--primary);">確認匯入</button>
+        <button id="importCancelBtn" style="background:var(--muted);">取消</button>
+      </div>
     </div>
 
     <div class="panel" id="healthCheckPanel" style="display:none;">
@@ -1794,7 +1809,7 @@ async function renderGrid(){
     for(let day=1; day<=nDays; day++){
       const ds = dateStr(monthCursor, day);
       const count = items.filter(p=> monthData[p.id] && g.match(monthData[p.id][ds])).length;
-      const cls = count < g.min ? 'low' : 'ok';
+      const cls = count===0 ? 'zero' : (count < g.min ? 'low' : 'ok');
       body += `<td class="count-cell ${cls}">${count}</td>`;
     }
     body += '<td></td><td></td><td></td>';
@@ -1877,7 +1892,8 @@ async function renderGrid(){
       <span><i style="background:#F4F4EF;border:1px solid #ddd"></i>／ 空班</span>
       <span><i style="background:#4C86C6"></i>R/R1 預約休假</span>
       <span><i style="background:#1F6B3A"></i>R 機構排定休假</span>
-      <span><i style="background:var(--danger)"></i>人力低於門檻</span>
+      <span><i style="background:var(--danger-soft)"></i>低於設定門檻</span>
+      <span><i style="background:var(--danger)"></i>當天人力為0(不論門檻)</span>
       <span style="color:var(--muted);">日期格上的色塊/文字是機構事件(可在「⚙後台管理」設定顏色與名稱)</span>
     `;
   } else {
@@ -2621,6 +2637,96 @@ document.getElementById('exportBtn').onclick = async ()=>{
     console.error('匯出失敗', e);
     showToast('⚠ 匯出失敗,請稍後再試一次');
   }
+};
+
+let pendingImportData = null; // {matched: [{staffId, name, values:[...]}], unmatchedNames: [...]}
+
+document.getElementById('importBtn').onclick = ()=>{
+  if(!canEditRole(currentRole)){ showToast('您的帳號對這個職務只有檢視權限,無法匯入'); return; }
+  const items = staff[currentRole];
+  if(items.length===0){ showToast('請先到後台管理新增人員,才能比對姓名匯入'); return; }
+  document.getElementById('importFileInput').value = '';
+  document.getElementById('importFileInput').click();
+};
+
+document.getElementById('importFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const wsName = wb.SheetNames[0];
+    const ws = wb.Sheets[wsName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if(rows.length < 2){ showToast('⚠ 這個檔案看起來沒有資料'); return; }
+
+    const nDays = daysInMonth(monthCursor);
+    const items = staff[currentRole];
+    const matched = [];
+    const unmatchedNames = [];
+
+    for(let r=1; r<rows.length; r++){
+      const row = rows[r];
+      const name = String(row[0]||'').trim();
+      if(!name) continue;
+      const p = items.find(x=>x.name===name);
+      const dayVals = [];
+      for(let day=1; day<=nDays; day++){
+        const cellVal = row[1+day]; // col0=姓名, col1=代碼, col2..=日期
+        dayVals.push(cellVal===undefined || cellVal===null ? '' : String(cellVal).trim());
+      }
+      if(p){ matched.push({staffId:p.id, name, values:dayVals}); }
+      else { unmatchedNames.push(name); }
+    }
+
+    if(matched.length===0){
+      showToast('⚠ 沒有任何姓名比對成功,請確認 Excel 第一欄是姓名、跟系統裡的人員姓名完全一致');
+      return;
+    }
+
+    pendingImportData = {matched, unmatchedNames, nDays};
+    document.getElementById('importSummary').textContent =
+      `本次匯入目標:${ROLES.find(r=>r.key===currentRole).label} · ${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月。比對成功 ${matched.length} 位,比對不到姓名 ${unmatchedNames.length} 位。`;
+    document.getElementById('importUnmatchedList').innerHTML = unmatchedNames.length
+      ? `<div class="hc-item soft"><span class="hc-badge">姓名比對不到</span><div class="hc-body"><div class="hc-title">${unmatchedNames.join('、')}</div><div class="hc-suggest">這幾位不會被匯入,請確認人員資料庫裡的姓名拼字是否一致</div></div></div>`
+      : '';
+    document.getElementById('importPreviewPanel').style.display = 'block';
+    document.getElementById('importPreviewPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }catch(err){
+    console.error('匯入解析失敗', err);
+    showToast('⚠ 讀取這個檔案時發生問題,請確認是有效的 Excel 檔案');
+  }
+});
+
+document.getElementById('importConfirmBtn').onclick = async ()=>{
+  if(!pendingImportData){ return; }
+  const monthData = await loadMonth();
+  let changed = 0;
+  pendingImportData.matched.forEach(({staffId, values})=>{
+    if(!monthData[staffId]) monthData[staffId] = {};
+    values.forEach((v, idx)=>{
+      if(v==='') return; // 空白不覆蓋既有資料
+      const day = idx+1;
+      const ds = dateStr(monthCursor, day);
+      const prevVal = monthData[staffId][ds] || '';
+      if(prevVal !== v){
+        undoStack.push({monthKey: monthKey(monthCursor), sid:staffId, ds, prevVal});
+        if(undoStack.length>50) undoStack.shift();
+      }
+      monthData[staffId][ds] = v;
+      changed++;
+    });
+  });
+  await saveMonth();
+  renderGrid();
+  document.getElementById('importPreviewPanel').style.display = 'none';
+  pendingImportData = null;
+  showToast(`已匯入,共更新 ${changed} 個儲存格`);
+};
+document.getElementById('importCancelBtn').onclick = ()=>{
+  pendingImportData = null;
+  document.getElementById('importPreviewPanel').style.display = 'none';
+  showToast('已取消匯入');
 };
 
 document.getElementById('printBtn').onclick = ()=>{
