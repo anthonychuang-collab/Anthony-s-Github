@@ -533,8 +533,18 @@ const ROLE_ALL = 'all';
 function monthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function daysInMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); }
 function dateStr(d, day){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; }
-function isWorkCode(v){ return !!v && v!=='休' && v!=='R1' && v!=='R2' && v!=='R' && v!=='/'; }
-function isRestCode(v){ return v==='休' || v==='R1' || v==='R2' || v==='R'; }
+function customLeaveCategory(v){
+  const c = customShiftCodes.find(c=>c.code===v);
+  return c ? (c.leaveCategory || '') : '';
+}
+function isSpecialLeaveCode(v){
+  return customLeaveCategory(v)==='special';
+}
+function isRegularLeaveCodeOnly(v){
+  return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='regular';
+}
+function isWorkCode(v){ return !!v && v!=='休' && v!=='R1' && v!=='R2' && v!=='R' && v!=='/' && customLeaveCategory(v)===''; }
+function isRestCode(v){ return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='special' || customLeaveCategory(v)==='regular'; }
 function uid(){ return 's'+Math.random().toString(36).slice(2,9); }
 
 function showToast(msg){
@@ -1062,9 +1072,10 @@ document.getElementById('builtinCodeTable').addEventListener('change', async (e)
   }
 });
 
-function ccColumns(){ return ['代碼','說明','顏色']; }
-function ccToRow(c){ return [c.code||'', c.label||'', c.color||'blue']; }
-function rowToCc(vals){ return {code:vals[0]||'', label:vals[1]||'', color:vals[2]||'blue'}; }
+const LEAVE_CATEGORY_OPTIONS = [{v:'', t:'不算休假'}, {v:'special', t:'算特休天數'}, {v:'regular', t:'算一般休假天數'}];
+function ccColumns(){ return ['代碼','說明','顏色','計入休假統計']; }
+function ccToRow(c){ return [c.code||'', c.label||'', c.color||'blue', c.leaveCategory||'']; }
+function rowToCc(vals){ return {code:vals[0]||'', label:vals[1]||'', color:vals[2]||'blue', leaveCategory:vals[3]||''}; }
 function ccAddRow(vals){
   const table = document.getElementById('customCodeTable');
   const rowIdx = table.tBodies[0].rows.length;
@@ -1088,6 +1099,16 @@ function ccAddRow(vals){
     sel2.appendChild(opt);
   });
   td2.appendChild(sel2); tr.appendChild(td2);
+
+  const td3 = document.createElement('td');
+  const sel3 = document.createElement('select');
+  sel3.dataset.row=rowIdx; sel3.dataset.col=3; sel3.style.cssText=selectStyle;
+  LEAVE_CATEGORY_OPTIONS.forEach(o=>{
+    const opt = document.createElement('option'); opt.value=o.v; opt.textContent=o.t;
+    if(vals && vals[3]===o.v) opt.selected = true;
+    sel3.appendChild(opt);
+  });
+  td3.appendChild(sel3); tr.appendChild(td3);
 
   const delTd = document.createElement('td'); delTd.className='del-col';
   const delBtn = document.createElement('button'); delBtn.textContent='×'; delBtn.onclick=()=>tr.remove();
@@ -1123,7 +1144,8 @@ document.getElementById('customCodeTable').addEventListener('paste', (e)=>{
       const cell = table.querySelector(`tbody tr:nth-child(${r+1}) [data-col="${c}"]`);
       if(!cell) return;
       if(cell.tagName==='SELECT'){
-        const match = EVENT_COLORS.find(o=> o.v===v || o.t===v);
+        const opts = c===2 ? EVENT_COLORS : (c===3 ? LEAVE_CATEGORY_OPTIONS : null);
+        const match = opts && opts.find(o=> o.v===v || o.t===v);
         if(match) cell.value = match.v;
       } else {
         cell.value = v;
@@ -1142,6 +1164,7 @@ document.getElementById('ccSave').onclick = async ()=>{
       tr.querySelector('[data-col="0"]').value.trim(),
       tr.querySelector('[data-col="1"]').value.trim(),
       tr.querySelector('[data-col="2"]').value,
+      tr.querySelector('[data-col="3"]').value,
     ];
     if(!vals[0]) return;
     if(builtinSet.has(vals[0])){ skipped++; return; }
@@ -1733,23 +1756,26 @@ async function renderGrid(){
     const isWeekend = wd===0 || wd===6;
     head += `<th class="${isWeekend?'weekend':''}">${day}<br>${WD[wd]}</th>`;
   }
-  head += '<th style="min-width:60px;background:#DCE7CE;">本月休假總計</th>';
+  head += '<th style="min-width:55px;background:#DCE7CE;">休假<br>天數</th><th style="min-width:55px;background:#F5E3C8;">特休<br>天數</th><th style="min-width:55px;background:#CFE0C8;">合計</th>';
   head += '</tr></thead>';
 
   let body = '<tbody>';
   items.forEach((p, rowIdx)=>{
     body += `<tr draggable="true" data-staff-id="${p.id}" class="staff-row-draggable"><td class="name-cell" style="cursor:grab;">⠿ ${p.name}</td><td class="code-cell">${p.code||''}</td>`;
-    let leaveCount = 0;
+    let regularLeaveCount = 0, specialLeaveCount = 0;
     for(let day=1; day<=nDays; day++){
       const ds = dateStr(monthCursor, day);
       const d = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
       const isWeekend = d.getDay()===0 || d.getDay()===6;
       const val = (monthData[p.id] && monthData[p.id][ds]) || '';
-      if(isLeaveCode(val)) leaveCount++;
+      if(isSpecialLeaveCode(val)) specialLeaveCount++;
+      else if(isRegularLeaveCodeOnly(val)) regularLeaveCount++;
       const {cls, style} = cellStyleFor(val);
       body += `<td class="shift-cell ${cls} ${isWeekend?'weekend-col':''}" style="${style}" data-staff="${p.id}" data-date="${ds}" data-row="${rowIdx}" data-col="${day}">${displayCode(val)}</td>`;
     }
-    body += `<td style="text-align:center;font-weight:800;background:#F0F5EA;color:var(--primary-deep);">${leaveCount}</td>`;
+    body += `<td style="text-align:center;font-weight:800;background:#F0F5EA;color:var(--primary-deep);">${regularLeaveCount}</td>`;
+    body += `<td style="text-align:center;font-weight:800;background:#FBF3E4;color:#9C7527;">${specialLeaveCount}</td>`;
+    body += `<td style="text-align:center;font-weight:800;background:#E6F0E1;color:#3D7A33;">${regularLeaveCount+specialLeaveCount}</td>`;
     body += '</tr>';
   });
 
@@ -1771,7 +1797,7 @@ async function renderGrid(){
       const cls = count < g.min ? 'low' : 'ok';
       body += `<td class="count-cell ${cls}">${count}</td>`;
     }
-    body += '<td></td>';
+    body += '<td></td><td></td><td></td>';
     body += '</tr>';
   });
 
@@ -1785,7 +1811,7 @@ async function renderGrid(){
       const isWeekend = wd===0 || wd===6;
       body += `<td style="text-align:center;font-weight:700;font-size:10.5px;background:${isWeekend?'var(--weekend-tint)':'#E7EDDD'};padding:4px 0;">${day}<br>${WD[wd]}</td>`;
     }
-    body += '<td style="background:#E7EDDD;"></td></tr>';
+    body += '<td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td></tr>';
 
     let maxLayers = 1;
     Object.values(eventMap).forEach(arr=>{ if(arr.length>maxLayers) maxLayers = arr.length; });
@@ -1802,7 +1828,7 @@ async function renderGrid(){
           body += `<td></td>`;
         }
       }
-      body += '<td></td></tr>';
+      body += '<td></td><td></td><td></td></tr>';
     }
   }
 
@@ -2550,19 +2576,19 @@ document.getElementById('exportBtn').onclick = async ()=>{
     const d = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
     header.push(`${monthCursor.getMonth()+1}/${day}(${WD[d.getDay()]})`);
   }
-  header.push('本月休假總計');
+  header.push('休假天數', '特休天數', '合計');
   const rows = [header];
-  function isLeaveCodeExport(v){ return v==='休' || v==='R1' || v==='R2' || v==='R'; }
   items.forEach(p=>{
     const row = [p.name, p.code||''];
-    let leaveCount = 0;
+    let regularLeaveCount = 0, specialLeaveCount = 0;
     for(let day=1; day<=nDays; day++){
       const ds = dateStr(monthCursor, day);
       const val = (monthData[p.id] && monthData[p.id][ds]) || '';
-      if(isLeaveCodeExport(val)) leaveCount++;
+      if(isSpecialLeaveCode(val)) specialLeaveCount++;
+      else if(isRegularLeaveCodeOnly(val)) regularLeaveCount++;
       row.push(displayCode(val));
     }
-    row.push(leaveCount);
+    row.push(regularLeaveCount, specialLeaveCount, regularLeaveCount+specialLeaveCount);
     rows.push(row);
   });
   const groups = currentRole==='nursing' ? [
@@ -2585,7 +2611,7 @@ document.getElementById('exportBtn').onclick = async ()=>{
   });
   try{
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:10},{wch:14}, ...Array(nDays).fill({wch:8}), {wch:12}];
+    ws['!cols'] = [{wch:10},{wch:14}, ...Array(nDays).fill({wch:8}), {wch:9},{wch:9},{wch:9}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, ROLES.find(r=>r.key===currentRole).label);
     const fname = `${ROLES.find(r=>r.key===currentRole).label}_${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月_排班表.xlsx`;
