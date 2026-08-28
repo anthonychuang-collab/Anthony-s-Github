@@ -1,5 +1,28 @@
 # CHANGELOG — 後端正式版
 
+## 2026-08 — 同步原型 v0.7.0(修正9~12:色票、自訂代碼匯入、對照草稿、多格選取重構)
+
+這是第一次原型改動與「後端版自己加的功能」重疊,採「套用 26 個乾淨 hunk + 手動調和 3 個衝突 hunk」處理。
+
+### 同步進來的原型改動
+- **修正9 顏色系統升級**:所有顏色選擇從固定 6 色 `<select>` 改為原生 `<input type="color">`(完整色票)。新增 `resolveColor()`(同時吃舊代號 `blue` 與新 hex `#RRGGBB`)、`presetToHex()`、`contrastTextColor()`、`tintBg()`(選任意色自動算淺底+對比文字色)。內建代碼多一個「還原」按鈕清除覆寫。
+- **修正10 自訂代碼匯入 Excel**:自訂班別代碼表格也能上傳 Excel 匯入(沿用修正8 模式,但直接加列、按「儲存變更」才生效,無預覽面板)。
+- **修正11 多格選取根因修復 + 對照版草稿**:`<tr draggable>` 造成子儲存格繼承「可拖曳」而讓多格選取失效——在 `.shift-cell`/`.code-cell` 明確加 `draggable="false"` + `mousedown` 內 `e.preventDefault()`。新增「對照版班表」草稿(`loadDraftMonth`/`saveDraftMonth`/`#draftTable`),可與正式班表並排比對。
+- **修正12 草稿也支援多格選取**:新增 `selTarget`('live'/'draft'),`setSelRange` 多一個 target 參數,`applySelHighlight`/`deleteSelectedRange`/`fillSelectedRangeWithMatrix`/Ctrl+C 依 selTarget 分流(草稿操作不寫入 undo)。
+
+### 與後端版既有功能的調和(3 個衝突 hunk 手動處理)
+- **顏色疊加(後端版特有)× 修正9**:我的 `builtinTintStyle()`(保留大夜深底/兼職斜紋/12h虛線框)原本用 `eventColor`,改為用 `resolveColor`——**現在疊加效果同時支援舊代號與新 hex 色**;`cellStyleFor` 與代碼參考列 `styleFor` 的自訂代碼分支也一併改 `resolveColor`。
+- **Shift+方向鍵選取(後端版特有)× 修正11/12**:合併兩邊——保留我的 `selAnchor`/`selCursor`,同時加上修正11 的 `e.preventDefault()` 與修正12 的 `setSelRange(...,'live')`;鍵盤擴充改為依目前 `selTarget` 決定作用在正式表或草稿表。
+
+### 驗證
+- `npm test` 全綠;新增 `test_color_picker_resolve.js`(11 項)、`test_multiselect_and_draft.js`(6 項)。
+- Playwright 實測共存:顏色疊加對 hex 藍(N 保留深底)、代號綠(Dp 保留斜紋)、hex 橘(D8 保留虛線)皆正確;Shift+方向鍵在正式表選取 2×2、selTarget 保持 'live';`resolveColor` 對 hex 與代號都對;**0 個 JS 執行期例外**。
+
+### 沿用原型的離線提醒
+匯入/匯出仍依賴 CDN 版 SheetJS,需網路(離線打包待後續)。
+
+---
+
 ## 2026-08 — 同步原型 v0.5.0(修正7 CIS 視覺 + 修正8 匯入 Excel)
 
 以精確 diff(v0.4.0→v0.5.0)只取這兩塊 delta 套進後端版,先前所有功能與認證/儲存層不受影響。
