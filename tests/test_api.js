@@ -42,6 +42,7 @@ async function check(name, fn){
 
   let adminToken = null;
   let staffUserId = null;
+  let adminRecoveryCode = null;
 
   await check('一開始 needsSetup 應為 true', async () => {
     const r = await req('GET', '/api/auth/status');
@@ -59,6 +60,8 @@ async function check(name, fn){
     assert.ok(r.data.token, '應回傳 token');
     assert.strictEqual(r.data.user.isSuperAdmin, true);
     adminToken = r.data.token;
+    assert.ok(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(r.data.recoveryCode || ''), 'setup 應回傳 XXXX-XXXX-XXXX 格式的救援碼');
+    adminRecoveryCode = r.data.recoveryCode;
   });
 
   await check('已有帳號後 needsSetup 應為 false', async () => {
@@ -133,6 +136,64 @@ async function check(name, fn){
   await check('偽造 token 應被拒(401)', async () => {
     const r = await req('GET', '/api/auth/me', { token: 'not-a-real-token' });
     assert.strictEqual(r.status, 401);
+  });
+
+  // ---- 忘記密碼救援機制（修正14，後端原生實作）----
+  await check('忘記密碼:錯誤救援碼應被拒(401)', async () => {
+    const r = await req('POST', '/api/auth/recover', { body: { username: 'admin', recoveryCode: 'WRON-GWRO-NGWR', newPassword: 'newpass123' } });
+    assert.strictEqual(r.status, 401);
+  });
+
+  await check('忘記密碼:不存在的帳號應回 404', async () => {
+    const r = await req('POST', '/api/auth/recover', { body: { username: '查無此人', recoveryCode: adminRecoveryCode, newPassword: 'x' } });
+    assert.strictEqual(r.status, 404);
+  });
+
+  await check('忘記密碼:正確救援碼可重設密碼(大小寫/空白不敏感)', async () => {
+    const messyCode = ('  ' + adminRecoveryCode.toLowerCase() + '  ');
+    const r = await req('POST', '/api/auth/recover', { body: { username: 'admin', recoveryCode: messyCode, newPassword: 'brandNew123' } });
+    assert.strictEqual(r.status, 200);
+  });
+
+  await check('重設後:舊密碼失敗、新密碼成功', async () => {
+    const oldLogin = await req('POST', '/api/auth/login', { body: { username: 'admin', password: 'secret123' } });
+    assert.strictEqual(oldLogin.status, 401);
+    const newLogin = await req('POST', '/api/auth/login', { body: { username: 'admin', password: 'brandNew123' } });
+    assert.strictEqual(newLogin.status, 200);
+    adminToken = newLogin.data.token;
+  });
+
+  await check('救援碼是一次性:同一組不會外洩在使用者清單裡', async () => {
+    const r = await req('GET', '/api/users', { token: adminToken });
+    const admin = r.data.users.find(u => u.username === 'admin');
+    assert.ok(admin && admin.recoveryCode === undefined && admin.recovery_code === undefined, '使用者清單不應含救援碼');
+  });
+
+  await check('新增帳號會回傳一次性救援碼', async () => {
+    const r = await req('POST', '/api/users', { token: adminToken, body: { username: 'nurse_r', password: 'pw123456', editRoles: [], viewRoles: [], isSuperAdmin: false } });
+    assert.strictEqual(r.status, 201);
+    assert.ok(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(r.data.recoveryCode || ''), '新增帳號應回傳救援碼');
+  });
+
+  await check('超級管理者可重設某帳號的救援碼,新碼可用來重設密碼', async () => {
+    const list = await req('GET', '/api/users', { token: adminToken });
+    const nurse = list.data.users.find(u => u.username === 'nurse_r');
+    const reset = await req('POST', '/api/users/' + nurse.id + '/reset-recovery', { token: adminToken });
+    assert.strictEqual(reset.status, 200);
+    const newCode = reset.data.recoveryCode;
+    assert.ok(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(newCode || ''), '應回傳新救援碼');
+    const rec = await req('POST', '/api/auth/recover', { body: { username: 'nurse_r', recoveryCode: newCode, newPassword: 'resetpw999' } });
+    assert.strictEqual(rec.status, 200);
+    const login = await req('POST', '/api/auth/login', { body: { username: 'nurse_r', password: 'resetpw999' } });
+    assert.strictEqual(login.status, 200);
+  });
+
+  await check('一般帳號不能重設別人的救援碼(403)', async () => {
+    const login = await req('POST', '/api/auth/login', { body: { username: 'nurse_r', password: 'resetpw999' } });
+    const list = await req('GET', '/api/users', { token: adminToken });
+    const someone = list.data.users.find(u => u.username === 'admin');
+    const r = await req('POST', '/api/users/' + someone.id + '/reset-recovery', { token: login.data.token });
+    assert.strictEqual(r.status, 403);
   });
 
   server.close();

@@ -32,14 +32,23 @@ router.post('/', (req, res) => {
   if (Users.findByUsername(name)) {
     return res.status(409).json({ error: '這個帳號名稱已經有人用了' });
   }
-  const user = Users.create({
+  const { user, recoveryCode } = Users.create({
     username: name,
     password: String(password),
     editRoles: Array.isArray(editRoles) ? editRoles : [],
     viewRoles: Array.isArray(viewRoles) ? viewRoles : [],
     isSuperAdmin: !!isSuperAdmin,
   });
-  res.status(201).json({ user });
+  // recoveryCode 只在這一次回傳，前端要提示管理者轉告本人記下
+  res.status(201).json({ user, recoveryCode });
+});
+
+// 重設某帳號的救援碼（原救援碼也遺失時使用；只有超級管理者能操作，回傳新的明碼救援碼）
+router.post('/:id/reset-recovery', (req, res) => {
+  const target = Users.findById(req.params.id);
+  if (!target) return res.status(404).json({ error: '找不到這個帳號' });
+  const recoveryCode = Users.resetRecoveryCode(req.params.id);
+  res.json({ recoveryCode });
 });
 
 router.put('/:id', (req, res) => {

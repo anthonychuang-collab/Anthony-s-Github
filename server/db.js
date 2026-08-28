@@ -37,4 +37,10 @@ db.exec(`
   );
 `);
 
+// --- 遷移：舊資料庫可能沒有 recovery_code 欄位（忘記密碼救援碼的 bcrypt 雜湊），補上 ---
+const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+if (!userCols.includes('recovery_code')) {
+  db.exec("ALTER TABLE users ADD COLUMN recovery_code TEXT NOT NULL DEFAULT ''");
+}
+
 module.exports = db;

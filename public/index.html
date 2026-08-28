@@ -223,6 +223,14 @@
     <input type="text" id="loginUsername" placeholder="帳號" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit;margin:6px 0;">
     <input type="password" id="loginPassword" placeholder="密碼" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit;margin:6px 0;">
     <div><button id="loginSubmit" style="border:none;border-radius:11px;background:var(--primary);color:#fff;padding:10px 20px;font-weight:700;cursor:pointer;font-size:13px;margin-top:8px;">登入</button></div>
+    <div style="margin-top:8px;"><button id="showForgotBtn" style="border:none;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;">忘記密碼?</button></div>
+    <div id="forgotPanel" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);text-align:left;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">用建立帳號時系統顯示過的「救援碼」重設密碼。忘記救援碼的話,只能請有後台權限的其他人幫你在「使用者帳號管理」重設密碼。</div>
+      <input type="text" id="forgotUsername" placeholder="帳號" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;margin:4px 0;">
+      <input type="text" id="forgotRecoveryCode" placeholder="救援碼" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;margin:4px 0;">
+      <input type="password" id="forgotNewPassword" placeholder="新密碼" style="width:100%;border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;margin:4px 0;">
+      <button id="forgotSubmitBtn" style="border:none;border-radius:9px;background:var(--amber-deep);color:#fff;padding:8px 16px;font-weight:700;cursor:pointer;font-size:12px;margin-top:6px;">重設密碼</button>
+    </div>
     <div class="hint">帳號密碼由系統管理者於後台建立與管理。登入狀態僅保留在本次瀏覽期間,重新整理頁面需要再次登入。</div>
   </div>
 </div>
@@ -786,8 +794,50 @@ document.getElementById('loginSubmit').onclick = async ()=>{
     showToast((r.data && r.data.error) || '登入失敗'); return;
   }
   window.Api.setToken(r.data.token);
-  if(needsSetup){ needsSetup = false; showToast('已建立管理者帳號並登入'); }
+  if(needsSetup){
+    needsSetup = false;
+    // 第一個管理者帳號建立成功：先把救援碼顯示一次（之後查不到），確認記下才進系統
+    if(r.data.recoveryCode){
+      showRecoveryCodeGate(r.data.recoveryCode, '管理者帳號已建立,請務必先記下這組「救援碼」', ()=> enterApp(r.data.user));
+      return;
+    }
+    showToast('已建立管理者帳號並登入');
+  }
   await enterApp(r.data.user);
+};
+
+// 顯示「只出現這一次」的救援碼,要求使用者按確認才繼續
+function showRecoveryCodeGate(code, title, onContinue){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `<div class="panel" style="max-width:420px;width:100%;text-align:left;">
+    <div style="font-weight:800;margin-bottom:8px;">${title}</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">忘記密碼時要靠它重設。系統只會顯示這一次、之後無法再查詢,請立刻抄下或拍照保存。</div>
+    <div style="font-family:monospace;font-size:20px;font-weight:800;margin:10px 0;text-align:center;letter-spacing:2px;background:var(--amber-soft);border-radius:9px;padding:12px;">${code}</div>
+    <button id="recoveryGateBtn" style="border:none;border-radius:9px;background:var(--primary);color:#fff;padding:10px 16px;font-weight:700;cursor:pointer;font-size:13px;width:100%;">我已經記下來了,繼續</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#recoveryGateBtn').onclick = ()=>{ overlay.remove(); if(onContinue) onContinue(); };
+}
+
+// 登入畫面的「忘記密碼」：用帳號+救援碼向後端重設密碼
+document.getElementById('showForgotBtn').onclick = ()=>{
+  const panel = document.getElementById('forgotPanel');
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+};
+document.getElementById('forgotSubmitBtn').onclick = async ()=>{
+  const uname = document.getElementById('forgotUsername').value.trim();
+  const code = document.getElementById('forgotRecoveryCode').value.trim();
+  const newPw = document.getElementById('forgotNewPassword').value;
+  if(!uname || !code || !newPw){ showToast('請把帳號、救援碼、新密碼都填寫完整'); return; }
+  const r = await window.Api.req('POST', '/api/auth/recover', { username: uname, recoveryCode: code, newPassword: newPw });
+  if(r.networkError){ showToast('無法連線到伺服器,請確認排班系統伺服器有開著'); return; }
+  if(!r.ok){ showToast((r.data && r.data.error) || '重設失敗'); return; }
+  document.getElementById('forgotUsername').value='';
+  document.getElementById('forgotRecoveryCode').value='';
+  document.getElementById('forgotNewPassword').value='';
+  document.getElementById('forgotPanel').style.display='none';
+  showToast('密碼已重設,請用新密碼登入');
 };
 
 document.getElementById('logoutBtn').onclick = async ()=>{
@@ -894,10 +944,27 @@ function renderUserAddForm(){
     }
     if(!r.ok){ showToast((r.data && r.data.error) || '儲存失敗'); return; }
     await renderUserList();
-    showToast('已儲存帳號設定');
+    // 新增帳號時,後端會回傳一組只顯示一次的救援碼,提示管理者轉告本人記下
+    if(!editing && r.data && r.data.recoveryCode){
+      showRecoveryCodeGate(r.data.recoveryCode, `「${uname}」的救援碼(請轉告本人記下)`, null);
+    } else {
+      showToast('已儲存帳號設定');
+    }
   };
   if(editing){
     document.getElementById('userCancelEdit').onclick = ()=>{ editingUserId=null; renderUserAddForm(); };
+    // 原救援碼也遺失時,由超級管理者代為重設(呼叫後端產生新的一組)
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.textContent = '重設這個帳號的救援碼';
+    resetBtn.className = 'submit';
+    resetBtn.style.cssText = 'background:var(--danger);margin-top:8px;';
+    resetBtn.onclick = async ()=>{
+      const rr = await window.Api.req('POST', '/api/users/'+encodeURIComponent(editing.id)+'/reset-recovery');
+      if(!rr.ok || !rr.data || !rr.data.recoveryCode){ showToast((rr.data && rr.data.error) || '重設救援碼失敗'); return; }
+      showRecoveryCodeGate(rr.data.recoveryCode, `「${editing.username}」的新救援碼(請轉告本人記下)`, null);
+    };
+    document.getElementById('userAddForm').appendChild(resetBtn);
   }
 }
 
@@ -2582,13 +2649,12 @@ async function autoScheduleNursing(){
   });
 
   // ---- Pass B: everyone else who can help cover 白班/小夜/大夜 gaps ----
-  // 這裡是修正的重點:之前只有「輪調中的貼班同仁」會去補白班缺口,
-  // 導致「有白班資格但沒設定輪調」的同仁完全沒被排進 2Di/3Di,只會拿到休假。
-  // 現在改成:所有還沒被排班別的白班資格同仁(貼班同仁 + 一般白班同仁)都納入同一個補位池,
-  // 小夜/大夜資格的同仁也納入補位池去補小夜/大夜缺口。
-  const floorFillPool = items.filter(p=> p.eligWhite && p!==regulars['2Di'] && p!==regulars['3Di']);
-  const eveningPool = items.filter(p=> p.eligEvening);
-  const nightPool = items.filter(p=> p.eligNight);
+  // 修正重點1:補位池要排除兼職(partTime)同仁——兼職只能在自己固定到班星期上Dp/Ep,
+  // 不應該被自動排班拉去補正式的2Di/3Di/E/N,那樣會違反「兼職只能排固定到班星期」的硬性規則。
+  // 兼職同仁的班別完全交給使用者手動安排。
+  const floorFillPool = items.filter(p=> p.eligWhite && !p.partTime && p!==regulars['2Di'] && p!==regulars['3Di']);
+  const eveningPool = items.filter(p=> p.eligEvening && !p.partTime);
+  const nightPool = items.filter(p=> p.eligNight && !p.partTime);
   const floorCount = {}, eCount = {}, nCount = {};
   items.forEach(p=>{ floorCount[p.id]=0; eCount[p.id]=0; nCount[p.id]=0; });
 
@@ -2623,7 +2689,13 @@ async function autoScheduleNursing(){
   }
 
   // ---- Pass C: 剩下還空著的格子 → 先休假湊到每月額度,滿了才排 Di(白班資格)或維持休假 ----
+  // 修正重點2:兼職同仁完全跳過這一段,格子維持空白讓使用者手動排Dp/Ep,
+  // 不會被自動塞休/Di。同時「每月休假天數」這條規則如果被設定成「僅全職適用」,
+  // 這裡也要跟健檢一致,不對兼職同仁套用休假額度邏輯(雖然兼職已經整批跳過,這裡仍保留判斷式以防未來調整)。
+  const monthlyRestTarget = getRuleConfig('monthly_rest_days').target;
   items.forEach(p=>{
+    if(p.partTime) return; // 兼職完全不自動排,交給使用者手動排Dp/Ep
+    if(monthlyRestTarget==='fulltime' && p.partTime) return; // 保留判斷式,雙重保險
     let restDays = restCountSoFar(p);
     for(let day=1; day<=nDays; day++){
       if(!isEmpty(p, day)) continue;
@@ -2669,7 +2741,7 @@ const SHIFT_TIME_RANGE = {'Di':[8,16],'2Di':[8,16],'3Di':[8,16],'2D8':[8,20],'3D
 /* 純白班同仁的3個月輪調:2Di / 3Di / 貼班(白班) 循環 */
 const ROTATION_SEQUENCE = ['2Di','3Di','float'];
 function isPureWhiteRotationStaff(p){
-  return p.rotationTrack==='rotate' && p.eligWhite && !p.eligEvening && !p.eligNight;
+  return p.rotationTrack==='rotate' && p.eligWhite && !p.eligEvening && !p.eligNight && !p.partTime;
 }
 function rotationCategoryForMonth(p, monthCursorDate){
   if(!p.rotationStartMonth || !p.rotationStartShift) return null;

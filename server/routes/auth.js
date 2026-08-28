@@ -27,7 +27,7 @@ router.post('/setup', (req, res) => {
     return res.status(400).json({ error: '請輸入帳號與密碼' });
   }
   // 第一個帳號自動成為擁有全部權限的超級管理者
-  const user = Users.create({
+  const { user, recoveryCode } = Users.create({
     username: String(username).trim(),
     password: String(password),
     editRoles: [ROLE_ALL],
@@ -35,7 +35,22 @@ router.post('/setup', (req, res) => {
     isSuperAdmin: true,
   });
   const token = signToken(user);
-  res.json({ token, user });
+  // recoveryCode 只在這一次回傳（之後查不到），前端要提示使用者記下
+  res.json({ token, user, recoveryCode });
+});
+
+// 忘記密碼：用帳號 + 救援碼重設密碼（不需登入）
+router.post('/recover', (req, res) => {
+  const { username, recoveryCode, newPassword } = req.body || {};
+  if (!username || !recoveryCode || !newPassword) {
+    return res.status(400).json({ error: '請把帳號、救援碼、新密碼都填寫完整' });
+  }
+  const result = Users.resetPasswordByRecovery(username, recoveryCode, newPassword);
+  if (!result.ok) {
+    if (result.reason === 'no_user') return res.status(404).json({ error: '找不到這個帳號' });
+    return res.status(401).json({ error: '救援碼不正確,請確認是否輸錯,或請有後台權限的人幫你重設密碼' });
+  }
+  res.json({ ok: true });
 });
 
 router.post('/login', (req, res) => {

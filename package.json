@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/test_rotation.js && node tests/test_rest_interval.js && node tests/test_auto_schedule_floor_fill.js && node tests/test_weekend_pref_grouping.js && node tests/test_leave_category_split.js && node tests/test_import_matching.js && node tests/test_color_picker_resolve.js && node tests/test_multiselect_and_draft.js && node tests/test_api.js"
+    "test": "node tests/test_rotation.js && node tests/test_rest_interval.js && node tests/test_auto_schedule_floor_fill.js && node tests/test_weekend_pref_grouping.js && node tests/test_leave_category_split.js && node tests/test_import_matching.js && node tests/test_color_picker_resolve.js && node tests/test_multiselect_and_draft.js && node tests/test_parttime_exclusion.js && node tests/test_api.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

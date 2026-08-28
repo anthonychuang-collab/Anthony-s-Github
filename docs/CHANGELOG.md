@@ -1,5 +1,35 @@
 # CHANGELOG — 後端正式版
 
+## 2026-08 — 同步原型 v0.8.0(修正13 自動排班排除兼職 + 修正14 忘記密碼救援)
+
+### 修正13:自動排班排除兼職同仁、遵守適用對象(直接移植)
+純前端 autoSchedule 調整,與後端無關,乾淨套用:
+- `floorFillPool`/`eveningPool`/`nightPool` 補位池加 `&& !p.partTime`,兼職不會被自動拉去補 2Di/3Di/E/N。
+- `isPureWhiteRotationStaff()` 加 `&& !p.partTime`。
+- Pass C 加 `if(p.partTime) return;`,兼職格子維持空白讓使用者手動排 Dp/Ep。
+- 測試:`test_parttime_exclusion.js`(8 項)。
+
+### 修正14:忘記密碼救援機制(**後端原生重寫,非照搬原型**)
+原型把救援碼存在前端 `window.storage` 帳號的明文欄位、用前端 `users` 陣列比對——這在後端版**完全不適用**(帳號在 SQLite、密碼是 bcrypt、走 `/api/auth`)。因此**在後端重新實作,而且比原型更安全**:
+
+**後端**
+- `users` 表新增 `recovery_code` 欄位(對舊資料庫自動 `ALTER TABLE` 遷移)。
+- 救援碼在 DB 裡以 **bcrypt 雜湊**儲存(**不是明文**,比原型安全),明碼只在建立/重設當下回傳一次。
+- `models.js`:`genRecoveryCode()`(XXXX-XXXX-XXXX)、`create()` 產生並回傳 `{user, recoveryCode}`、`resetPasswordByRecovery()`、`resetRecoveryCode()`;比對用 `.trim().toUpperCase()` 正規化。
+- 新端點:`POST /api/auth/recover`(帳號+救援碼+新密碼,不需登入);`POST /api/users/:id/reset-recovery`(僅超級管理者)。`setup` 與 `POST /api/users` 回應新增一次性 `recoveryCode`。
+
+**前端**
+- 登入畫面新增「忘記密碼?」入口與重設表單,接 `POST /api/auth/recover`。
+- 建立第一個管理者/後台新增帳號後,用畫面內的 `showRecoveryCodeGate()` 顯示救援碼一次(要求按「我已記下」才繼續)。
+- 後台編輯帳號加「重設這個帳號的救援碼」按鈕,接 `POST /api/users/:id/reset-recovery`。
+
+**驗證**
+- `test_api.js` 擴充至 23 項,新增:setup 回傳救援碼、錯誤碼 401、查無帳號 404、正確碼(大小寫/空白不敏感)可重設、重設後舊密碼失效新密碼可登入、清單不外洩救援碼、新增帳號回傳救援碼、超管可重設他人救援碼且新碼可用、一般帳號不能重設他人救援碼 403。
+- Playwright 端對端:設定→救援碼 gate→進系統→登出→忘記密碼(輸入小寫救援碼測正規化)→重設→新密碼登入成功;**0 執行期例外**。
+- 未採用原型的 `test_recovery_code.js`(測的是前端明文比對邏輯,後端版不使用)。
+
+---
+
 ## 2026-08 — 同步原型 v0.7.0(修正9~12:色票、自訂代碼匯入、對照草稿、多格選取重構)
 
 這是第一次原型改動與「後端版自己加的功能」重疊,採「套用 26 個乾淨 hunk + 手動調和 3 個衝突 hunk」處理。
