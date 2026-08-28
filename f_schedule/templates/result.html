@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ month }} F 班已產生｜大眾長照體系</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <div class="t">F 班自動排定系統<small>大眾長照體系 · 護理之家排班</small></div>
+  </div>
+</header>
+<div class="wrap" style="max-width:860px">
+  <h1><span class="tick">✓</span>{{ month }} F 班已產生</h1>
+  <div class="card">
+    <div class="dl">
+      <a class="btn pri" href="/download/{{ token }}/f">下載 F 班 (xlsx)</a>
+      <a class="btn sec" href="/download/{{ token }}/report">下載檢核報告 (txt)</a>
+    </div>
+  </div>
+  <div class="card" style="border-color:var(--brand);background:var(--tint)">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:800;font-size:16px;color:var(--forest)">下一步：接著產出文件</div>
+        <div style="font-size:13.5px;color:var(--sub);margin-top:3px">
+          用這份 F 班自動填「約束評估記錄單」與「住民日常生活照護表」的值班姓名</div>
+      </div>
+      <a class="btn pri" href="/workflow/{{ token }}">前往產出文件 →</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="tiles">
+      <div class="tile"><div class="k">納入人數</div><div class="v">{{ s.n_people }}</div>
+        <div class="k">護理{{ s.n_nurse }}／台籍{{ s.n_tw }}／外籍{{ s.n_foreign }}</div></div>
+      <div class="tile"><div class="k">設立標準缺口</div>
+        <div class="v {{ 'ok' if s.post_gap==0 else 'bad' }}">{{ s.post_gap }}</div>
+        <div class="k">補班前 {{ s.pre_gap }} 項</div></div>
+      <div class="tile"><div class="k">自動補人頭</div><div class="v">{{ s.n_heads }}</div>
+        <div class="k">少休出勤 {{ s.shaoxiu_total }} 天</div></div>
+      <div class="tile"><div class="k">勞基法提示</div>
+        <div class="v {{ 'ok' if s.lab_count==0 else 'warn' }}">{{ s.lab_count }}</div>
+        <div class="k">例假／順排</div></div>
+    </div>
+    <div style="margin-top:14px">
+      {% if s.post_gap==0 %}<span class="badge ok">設立標準全數達標</span>
+      {% else %}<span class="badge warn">尚有 {{ s.post_gap }} 項人力缺口，請見報告</span>{% endif %}
+    </div>
+  </div>
+  {% if s.lab_issues %}
+  <div class="card">
+    <h3>勞基法提示（多為原始 T 班休假分布問題，建議人工檢視）</h3>
+    <ul>{% for i in s.lab_issues[:12] %}<li>{{ i }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <div class="card">
+    <details><summary>檢視完整檢核報告</summary><pre>{{ s.report_text }}</pre></details>
+  </div>
+  <a class="back" href="/">← 回上一頁，再產生一個月份</a>
+  <div class="slogan" style="text-align:center;font-size:12.5px;margin-top:18px">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+</div>
+</body>
+</html>

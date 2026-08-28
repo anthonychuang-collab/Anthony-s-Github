@@ -1,0 +1,76 @@
+/* 大眾長照體系 — F 班系統 共用樣式 (品牌 CI) */
+:root{
+  --brand:#62AF65; --brand-d:#4E9A54; --forest:#3F7A46; --gold:#D2A24C;
+  --ink:#33302B; --sub:#847C6D; --paper:#F3EFE6; --line:#E7E1D3; --tint:#EAF2E3;
+  --ok:#3F7A46; --okbg:#E7F1E0; --warn:#9A6B00; --warnbg:#FBF2DA; --bad:#9C4A2E; --badbg:#FBEDE7;
+}
+*{box-sizing:border-box;}
+body{margin:0;color:var(--ink);
+  font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+  background-color:var(--paper);
+  background-image:radial-gradient(rgba(0,0,0,.015) 1px,transparent 1px);
+  background-size:4px 4px;}
+.papery, .card, .box{ background:#fff; }
+header{background:#fff;border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(0,0,0,.02);}
+.head-in{max-width:860px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px;}
+.head-in img{height:46px;}
+.head-in .t{font-weight:800;font-size:17px;line-height:1.2;color:var(--ink);}
+.head-in .t small{display:block;font-weight:500;font-size:12px;color:var(--sub);margin-top:2px;}
+.head-in .sp{flex:1;}
+.head-in a.out{color:var(--sub);font-size:13px;text-decoration:none;border:1px solid var(--line);
+               padding:6px 12px;border-radius:999px;background:#fff;}
+.head-in a.out:hover{color:var(--brand-d);border-color:var(--brand);}
+.wrap{max-width:760px;margin:0 auto;padding:26px 20px 60px;}
+.lead{color:var(--sub);font-size:14px;margin:2px 0 22px;}
+.lead b{color:var(--forest);}
+.card{border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:18px;
+      box-shadow:0 2px 10px rgba(74,63,53,.04);}
+.err{background:var(--badbg);border:1px solid #E9C2B4;color:var(--bad);
+     padding:12px 14px;border-radius:12px;margin-bottom:18px;font-size:14px;}
+label.fld{display:block;font-weight:700;margin-bottom:6px;font-size:15px;}
+.hint{color:var(--sub);font-size:12.5px;font-weight:400;margin-left:6px;}
+.drop{border:2px dashed #CBD8C1;border-radius:14px;padding:16px;background:var(--tint);
+      display:flex;align-items:center;gap:14px;transition:.15s;}
+.drop:hover{border-color:var(--brand);background:#E1EDD8;}
+.drop .num{flex:0 0 34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;
+     display:flex;align-items:center;justify-content:center;font-weight:800;
+     box-shadow:0 2px 6px rgba(98,175,101,.35);}
+.drop input[type=file]{flex:1;font-size:14px;color:var(--ink);}
+.sheet{margin-top:8px;font-size:13px;color:var(--sub);}
+.sheet input{border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:13px;width:190px;background:#fff;}
+.row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;}
+.row .col{flex:1;min-width:180px;}
+input[type=text],input[type=password]{border:1px solid var(--line);border-radius:12px;
+     padding:11px 13px;font-size:15px;width:100%;background:#fff;}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:6px;color:var(--ink);}
+.chk input{accent-color:var(--brand);width:17px;height:17px;}
+button{background:var(--brand);color:#fff;border:0;border-radius:999px;
+       padding:15px 20px;font-size:16px;font-weight:800;cursor:pointer;width:100%;margin-top:8px;
+       box-shadow:0 4px 12px rgba(98,175,101,.35);transition:.15s;}
+button:hover{background:var(--brand-d);}
+.foot{color:var(--sub);font-size:12.5px;text-align:center;margin-top:20px;line-height:1.9;}
+.slogan{color:var(--forest);font-weight:700;letter-spacing:1px;}
+h1{font-size:21px;color:var(--forest);margin:0 0 18px;}
+h1 .tick{display:inline-flex;width:30px;height:30px;border-radius:50%;background:var(--ok);color:#fff;
+         align-items:center;justify-content:center;font-size:17px;margin-right:8px;vertical-align:-6px;}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+.tile{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--tint);}
+.tile .k{font-size:12.5px;color:var(--sub);}
+.tile .v{font-size:27px;font-weight:800;margin-top:2px;color:var(--ink);}
+.v.ok{color:var(--ok);} .v.bad{color:var(--bad);} .v.warn{color:var(--warn);}
+.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:800;}
+.badge.ok{background:var(--okbg);color:var(--ok);}
+.badge.warn{background:var(--warnbg);color:var(--warn);}
+.dl{display:flex;gap:12px;flex-wrap:wrap;}
+a.btn{display:inline-block;text-decoration:none;border-radius:999px;padding:13px 20px;font-weight:800;font-size:15px;}
+a.pri{background:var(--brand);color:#fff;box-shadow:0 4px 12px rgba(98,175,101,.35);} a.pri:hover{background:var(--brand-d);}
+a.sec{background:#fff;color:var(--forest);border:1px solid var(--brand);} a.sec:hover{background:var(--tint);}
+a.back{color:var(--sub);font-size:14px;text-decoration:none;} a.back:hover{color:var(--brand-d);}
+h3{font-size:15px;margin:0 0 10px;color:var(--ink);}
+ul{margin:0;padding-left:18px;} li{font-size:13.5px;margin:3px 0;line-height:1.5;color:#5a5348;}
+pre{background:#2E2B2B;color:#E7E1D3;border-radius:12px;padding:14px;font-size:12px;overflow:auto;max-height:320px;white-space:pre-wrap;}
+details summary{cursor:pointer;font-weight:800;font-size:14px;color:var(--forest);}
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.box{border:1px solid var(--line);border-radius:20px;padding:34px 30px 30px;width:350px;
+     box-shadow:0 8px 28px rgba(74,63,53,.10);text-align:center;}
+.box img{height:54px;margin-bottom:14px;}

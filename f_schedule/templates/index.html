@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F 班自動排定系統｜大眾長照體系</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <div class="t">F 班自動排定系統<small>大眾長照體系 · 護理之家排班</small></div>
+    <div class="sp"></div>
+    <a class="out" href="/logout">登出</a>
+  </div>
+</header>
+<div class="wrap">
+  <p class="lead">上傳 T 班 → 自動<b>轉碼、上色、補人頭、檢核</b> → 下載 F 班與檢核報告</p>
+  {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+  <form method="post" action="/generate" enctype="multipart/form-data">
+    <div class="card">
+      {% for key, block, label in blocks %}
+      <div style="margin-bottom:{{ '18px' if not loop.last else '0' }}">
+        <label class="fld">{{ label }}
+          <span class="hint">{{ '（必要）' if key=='nurse' else '（可留空）' }}．接受 .xlsx 或 .pdf</span>
+        </label>
+        <div class="drop">
+          <div class="num">{{ loop.index }}</div>
+          <input type="file" name="{{ key }}" accept=".xlsx,.xlsm,.pdf">
+        </div>
+        <div class="sheet">xlsx 分頁名稱（可留空自動偵測）：
+          <input type="text" name="{{ key }}_sheet" placeholder="例 115-08，留空即自動">
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <label class="fld">月份（民國年.月）</label>
+          <input type="text" name="month" value="{{ default_month }}" placeholder="例 115.08">
+        </div>
+        <div class="col">
+          <label class="chk"><input type="checkbox" name="fill" checked> 啟用自動補人頭（達設立標準）</label>
+        </div>
+      </div>
+      <button type="submit">產生 F 班</button>
+    </div>
+  </form>
+  <div class="card" style="border-color:var(--brand);background:var(--tint);display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:800;font-size:15px;color:var(--forest)">已經有 F 班了？</div>
+      <div style="font-size:13px;color:var(--sub);margin-top:3px">直接上傳你們的 F 班（含手動微調過的），跳過重算、直接產出文件</div>
+    </div>
+    <a class="btn sec" href="/docs">上傳 F 班產文件 →</a>
+  </div>
+
+  <div class="foot">
+    <div class="slogan">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+    規則與主檔皆讀自後台 <b>後台設定.xlsx</b>．資料僅存於機構主機，未對外連線
+  </div>
+</div>
+</body>
+</html>

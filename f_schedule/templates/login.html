@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登入｜F 班自動排定系統</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body class="center">
+  <form class="box" method="post">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <h1 style="font-size:18px;color:var(--ink);margin:0 0 2px">F 班自動排定系統</h1>
+    <p style="color:var(--sub);font-size:13px;margin:0 0 22px">機構內部使用．請輸入存取密碼</p>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <input type="password" name="password" placeholder="存取密碼" autofocus style="margin-bottom:12px">
+    <button type="submit">登入</button>
+    <div class="slogan" style="font-size:12.5px;margin-top:14px">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+    <div class="foot" style="margin-top:8px">資料僅存於機構主機，未對外連線</div>
+  </form>
+</body>
+</html>

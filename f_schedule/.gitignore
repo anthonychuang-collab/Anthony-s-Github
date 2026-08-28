@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.buildenv/
+build/
+dist/
+*.spec
+*_F班*.xlsx
+*檢核報告*.txt
+output/
+runtime/
+.DS_Store
