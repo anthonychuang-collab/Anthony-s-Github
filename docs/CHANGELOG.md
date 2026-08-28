@@ -1,5 +1,15 @@
 # CHANGELOG — 後端正式版
 
+## 2026-08 — 匯入/匯出離線化(SheetJS 改為本地打包)
+
+先前匯入/匯出依賴 CDN 版 SheetJS(`cdnjs.cloudflare.com/.../xlsx.full.min.js`),離線就失效。現改為本地打包:
+- 將 SheetJS 0.18.5 的 `xlsx.full.min.js`(862KB)放進 `public/vendor/`,由後端一併靜態送出。
+- `index.html` 的 `<script src>` 從 CDN 改為本地路徑 `vendor/xlsx.full.min.js`。
+- 同時強化中文字體 fallback(`'Noto Sans TC','PingFang TC','PingFang SC','Microsoft JhengHei','Heiti TC',...`),Google Fonts 保留為連線時的加分項,離線改用系統中文字體,不影響版面。
+- 驗證:伺服器正確送出 `/vendor/xlsx.full.min.js`(HTTP 200);Playwright 實測 XLSX 從本地載入,並完成「建 workbook → 寫出 → 讀回 → 解析」的離線 round-trip(王小明/3Di 正確),0 執行期例外。**匯入/匯出現在完全離線可用。**
+
+---
+
 ## 2026-08 — 同步原型 v0.8.0(修正13 自動排班排除兼職 + 修正14 忘記密碼救援)
 
 ### 修正13:自動排班排除兼職同仁、遵守適用對象(直接移植)
