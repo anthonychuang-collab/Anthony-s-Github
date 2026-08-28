@@ -21,7 +21,7 @@ const storageRoutes = require('./routes/storage');
 
 const app = express();
 
-app.use(express.json({ limit: '5mb' })); // 排班資料可能較大，放寬上限
+app.use(express.json({ limit: '25mb' })); // 排班資料可能較大（多月份/多人員），放寬上限
 
 // --- API ---
 app.use('/api/auth', authRoutes);
@@ -41,8 +41,17 @@ app.get(/^(?!\/api).*/, (req, res) => {
 
 // --- 統一錯誤處理 ---
 app.use((err, req, res, next) => {
-  console.error('伺服器錯誤：', err);
   if (res.headersSent) return next(err);
+  // 請求內容相關的錯誤：回清楚的 4xx，而不是一律籠統的 500
+  if (err && err.type === 'entity.too.large') {
+    console.warn('請求內容過大：', err.message);
+    return res.status(413).json({ error: '這次要儲存的資料太大,超過伺服器上限,請稍後再試或聯絡系統維護者' });
+  }
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    console.warn('請求內容不是合法 JSON：', err.message);
+    return res.status(400).json({ error: '送出的資料格式有誤(不是合法 JSON),請重新整理頁面後再試一次' });
+  }
+  console.error('伺服器錯誤：', err);
   res.status(500).json({ error: '伺服器內部錯誤' });
 });
 
