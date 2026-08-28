@@ -68,6 +68,22 @@ if (require.main === module) {
     console.log('====================================================');
   });
 
+  // 埠號被占用時，給看得懂的提示，而不是一大串英文錯誤堆疊
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error('\n====================================================');
+      console.error('  無法啟動：埠號 ' + config.port + ' 已經被占用');
+      console.error('  最可能的原因：排班系統已經在「另一個黑色視窗」執行中。');
+      console.error('');
+      console.error('  怎麼辦（擇一）：');
+      console.error('   1. 直接用瀏覽器開啟： http://localhost:' + config.port);
+      console.error('   2. 或先關掉另一個正在執行的黑色視窗，再重新啟動這一個。');
+      console.error('====================================================\n');
+      process.exit(1);
+    }
+    throw err;
+  });
+
   // 讓 Docker / 系統可以優雅關閉
   const shutdown = () => {
     console.log('\n正在關閉伺服器…');

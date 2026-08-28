@@ -64,16 +64,34 @@ EOF
   echo ""
 fi
 
-# ---- 4) 伺服器起來後，自動打開瀏覽器 ----
-( sleep 2 && open "http://localhost:3000" ) >/dev/null 2>&1 &
+# ---- 4) 讀出設定的埠號（預設 3000）----
+APP_PORT="$(grep -E '^PORT=' .env 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' \r')"
+[ -z "$APP_PORT" ] && APP_PORT=3000
+
+# ---- 4.5) 先看看系統是不是「已經在執行了」，避免重複啟動撞埠號 ----
+if curl -s "http://localhost:${APP_PORT}/api/health" >/dev/null 2>&1; then
+  echo "ℹ️  排班系統已經在執行中了,直接幫你打開瀏覽器。"
+  echo "   (如果你是想「重新啟動」,請先關掉另一個正在執行的黑色視窗,再點一次本檔案。)"
+  echo ""
+  open "http://localhost:${APP_PORT}"
+  echo "   這個視窗可以直接關掉。"
+  echo ""
+  echo "   (按 Enter 鍵關閉)"
+  read -r _
+  exit 0
+fi
+
+# ---- 5) 伺服器起來後，自動打開瀏覽器 ----
+( sleep 2 && open "http://localhost:${APP_PORT}" ) >/dev/null 2>&1 &
 
 echo "----------------------------------------------------"
 echo "  系統啟動中，稍等一下瀏覽器會自動打開："
-echo "     http://localhost:3000"
+echo "     http://localhost:${APP_PORT}"
 echo ""
 echo "  要結束系統：關掉這個黑色視窗，或按 Control + C"
+echo "  提醒：同一時間只要開「一個」系統視窗就好。"
 echo "----------------------------------------------------"
 echo ""
 
-# ---- 5) 啟動伺服器（前景執行）----
+# ---- 6) 啟動伺服器（前景執行）----
 node server/index.js
