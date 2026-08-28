@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上傳 F 班產出文件｜大眾長照體系</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <div class="t">F 班自動排定系統<small>大眾長照體系 · 護理之家排班</small></div>
+    <div class="sp"></div>
+    <a class="out" href="/">回首頁</a>
+  </div>
+</header>
+<div class="wrap">
+  <h1 style="color:var(--forest)">📄 已有 F 班 → 直接產出文件</h1>
+  <p class="lead">若你已經有一份 <b>F 班（本系統產生、或再手動微調過的 xlsx）</b>，
+     這裡直接上傳，即可產出約束評估記錄單與住民日常生活照護表。</p>
+  {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+  <form method="post" action="/docs" enctype="multipart/form-data">
+    <div class="card">
+      <label class="fld">F 班檔案 <span class="hint">．本系統格式 .xlsx</span></label>
+      <div class="drop">
+        <div class="num">F</div>
+        <input type="file" name="fban" accept=".xlsx,.xlsm">
+      </div>
+      <div class="row" style="margin-top:16px">
+        <div class="col">
+          <label class="fld">月份（民國年.月）</label>
+          <input type="text" name="month" value="{{ default_month }}" placeholder="例 115.08">
+        </div>
+      </div>
+      <button type="submit">讀取 F 班，前往產出文件 →</button>
+    </div>
+  </form>
+  <div class="foot">
+    <div class="slogan">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+    僅支援本系統產生的 F 班版面（依儲存格底色判樓層）
+  </div>
+</div>
+</body>
+</html>

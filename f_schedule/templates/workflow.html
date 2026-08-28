@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ month }} 產出文件｜大眾長照體系</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <div class="t">F 班自動排定系統<small>大眾長照體系 · 護理之家排班</small></div>
+  </div>
+</header>
+<div class="wrap" style="max-width:820px">
+  <h1 style="color:var(--forest)">📄 {{ month }} 產出下游文件</h1>
+  <p class="lead">以剛完成的 <b>{{ month }} F 班</b> 為依據，自動把每日三班的核章姓名填入下列表單。</p>
+  {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+  <div class="card">
+    <h3 style="font-size:16px">① 約束評估記錄單</h3>
+    <p style="font-size:13.5px;color:var(--sub);margin:4px 0 14px">
+      2F / 3F / 5F 各一份 Word，日期與年月已填，每 2 小時時段簽名欄以淺灰色預填當班護理核章姓名
+      （前 4 列大夜、中 4 列白班、後 4 列小夜）。範本已內建，直接產出即可。</p>
+    <form method="post" action="/make/restraint/{{ token }}">
+      <button type="submit" style="max-width:280px">產出約束評估記錄單（三樓層）</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3 style="font-size:16px">② 住民日常生活照護表</h3>
+    <p style="font-size:13.5px;color:var(--sub);margin:4px 0 14px">
+      將每日「白班護理／白班照服（台籍）／夜班照服（台籍）」姓名填入你們的照護表 Word 範本。
+      請上傳各樓層範本（.docx；沒有的樓層可留空）。</p>
+    <form method="post" action="/make/namecopy/{{ token }}" enctype="multipart/form-data">
+      <div class="row" style="gap:12px">
+        {% for fl in ['2F','3F','5F'] %}
+        <div class="col" style="min-width:150px">
+          <label class="fld" style="font-size:14px">{{ fl }} 照護表範本</label>
+          <div class="drop" style="padding:12px">
+            <div class="num" style="flex:0 0 28px;height:28px;font-size:13px">{{ fl }}</div>
+            <input type="file" name="tpl_{{ fl }}" accept=".docx">
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="submit" style="max-width:320px;margin-top:14px">產出住民日常生活照護表</button>
+    </form>
+  </div>
+  <a class="back" href="/">← 回首頁，產生其他月份</a>
+  <div class="slogan" style="text-align:center;font-size:12.5px;margin-top:18px">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+</div>
+</body>
+</html>
