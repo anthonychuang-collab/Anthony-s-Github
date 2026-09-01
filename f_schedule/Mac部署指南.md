@@ -14,3 +14,10 @@
 停用：雙擊 `mac/3_移除自動啟動.command`。
 記錄：`runtime/service.log`。
 第一次打包需連網下載工具；之後執行離線可用、資料不外流。
+
+## 選用：文件 PDF 定版
+產出約束評估記錄單／住民日常生活照護表時，系統會同時附一份 PDF（避免換電腦開啟時版面跑掉）。
+PDF 由 LibreOffice 轉檔，需在主機安裝一次（免費、離線）：
+- 下載安裝 <https://zh-tw.libreoffice.org/download/> ，或用 Homebrew：`brew install --cask libreoffice`。
+- 標楷體等字型由主機提供，PDF 版面與 Word 一致。
+- 沒安裝也能用：系統會只給 Word 檔（不會出錯）。

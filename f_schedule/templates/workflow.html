@@ -21,30 +21,48 @@
     <h3 style="font-size:16px">① 約束評估記錄單</h3>
     <p style="font-size:13.5px;color:var(--sub);margin:4px 0 14px">
       2F / 3F / 5F 各一份 Word，日期與年月已填，每 2 小時時段簽名欄以淺灰色預填當班護理核章姓名
-      （前 4 列大夜、中 4 列白班、後 4 列小夜）。範本已內建，直接產出即可。</p>
+      （前 4 列大夜、中 4 列白班、後 4 列小夜）。範本已內建，直接產出即可。
+      每份會同時附一份 <b>PDF（定版，避免換電腦開啟時版面跑掉）</b>。</p>
     <form method="post" action="/make/restraint/{{ token }}">
-      <button type="submit" style="max-width:280px">產出約束評估記錄單（三樓層）</button>
+      <button type="submit" style="max-width:280px">產出約束評估記錄單（Word＋PDF）</button>
     </form>
   </div>
   <div class="card">
     <h3 style="font-size:16px">② 住民日常生活照護表</h3>
     <p style="font-size:13.5px;color:var(--sub);margin:4px 0 14px">
-      將每日「白班護理／白班照服（台籍）／夜班照服（台籍）」姓名填入你們的照護表 Word 範本。
-      請上傳各樓層範本（.docx；沒有的樓層可留空）。</p>
-    <form method="post" action="/make/namecopy/{{ token }}" enctype="multipart/form-data">
-      <div class="row" style="gap:12px">
-        {% for fl in ['2F','3F','5F'] %}
-        <div class="col" style="min-width:150px">
-          <label class="fld" style="font-size:14px">{{ fl }} 照護表範本</label>
-          <div class="drop" style="padding:12px">
-            <div class="num" style="flex:0 0 28px;height:28px;font-size:13px">{{ fl }}</div>
-            <input type="file" name="tpl_{{ fl }}" accept=".docx">
-          </div>
+      將每日「白班護理／白班照服（台籍）／夜班照服（台籍）」姓名填入照護表 Word 範本。
+      範本已存在後台、每月自動沿用，<b>不用每次上傳</b>。要臨時換別的版本，才在下方當場上傳覆蓋。</p>
+    <div class="row" style="gap:10px;margin-bottom:12px">
+      {% for fl in ['2F','3F','5F'] %}
+      {% set st = care_status[fl] %}
+      <div class="col" style="min-width:150px;background:#f6f8f4;border-radius:12px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="num" style="flex:0 0 26px;height:26px;font-size:12px">{{ fl }}</div>
+          {% if st.set %}<b style="color:var(--forest);font-size:13.5px">已設定 ✓</b>
+          {% else %}<b style="color:#b06a2e;font-size:13.5px">未設定</b>{% endif %}
         </div>
-        {% endfor %}
+        {% if st.set %}<div style="font-size:11.5px;color:var(--sub);margin-top:4px">後台範本 · {{ st.mtime }}</div>{% endif %}
       </div>
-      <button type="submit" style="max-width:320px;margin-top:14px">產出住民日常生活照護表</button>
+      {% endfor %}
+    </div>
+    <form method="post" action="/make/namecopy/{{ token }}" enctype="multipart/form-data">
+      <details style="margin-bottom:10px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--forest)">臨時換範本（當次覆蓋，可留空）</summary>
+        <div class="row" style="gap:12px;margin-top:10px">
+          {% for fl in ['2F','3F','5F'] %}
+          <div class="col" style="min-width:150px">
+            <label class="fld" style="font-size:14px">{{ fl }} 範本</label>
+            <div class="drop" style="padding:12px">
+              <div class="num" style="flex:0 0 28px;height:28px;font-size:13px">{{ fl }}</div>
+              <input type="file" name="tpl_{{ fl }}" accept=".docx">
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      <button type="submit" style="max-width:340px;margin-top:6px">產出住民日常生活照護表（Word＋PDF）</button>
     </form>
+    <a href="/settings/templates" style="display:inline-block;margin-top:12px;font-size:13px;color:var(--forest)">⚙️ 後台範本設定（換範本 / 新增樓層）→</a>
   </div>
   <a class="back" href="/">← 回首頁，產生其他月份</a>
   <div class="slogan" style="text-align:center;font-size:12.5px;margin-top:18px">堅持熱忱｜讓愛茁壯｜散播歡樂</div>

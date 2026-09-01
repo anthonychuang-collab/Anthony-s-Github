@@ -28,7 +28,10 @@ def _tw_aides(converted):
     return [p for p in converted if p["block"] == "台籍照服"]
 
 
-def _pick(people, day, cat, floor=None):
+def _pick(people, day, cat, floor=None, avoid_head=False):
+    """挑當日符合(班別大類, 樓層)的人；回傳核章姓名。
+    avoid_head=True 時，若同格有多位，優先跳過護理長(is_head)，除非只剩護理長。"""
+    fallback = ""
     for p in people:
         info = p["days"].get(day, {})
         if not info.get("is_work"):
@@ -37,8 +40,13 @@ def _pick(people, day, cat, floor=None):
             continue
         if floor is not None and info.get("floor") != floor:
             continue
-        return p.get("record_name") or p["name"]
-    return ""
+        nm = p.get("record_name") or p["name"]
+        if avoid_head and p.get("is_head"):
+            if not fallback:
+                fallback = nm
+            continue
+        return nm
+    return fallback
 
 
 # ---------------- 約束評估記錄單 ----------------
@@ -52,7 +60,7 @@ def restraint_floor_data(converted, n_days):
         data[d] = {}
         for fl in FLOORS:
             data[d][fl] = {
-                "白班": _pick(nurses, d, "D白", fl),
+                "白班": _pick(nurses, d, "D白", fl, avoid_head=True),
                 "小夜": eve,
                 "大夜": night,
             }
@@ -80,7 +88,7 @@ def namecopy_assignments(converted, n_days):
     out = {fl: {} for fl in FLOORS}
     for d in range(1, n_days + 1):
         for fl in FLOORS:
-            day_nurse = _pick(nurses, d, "D白", fl)
+            day_nurse = _pick(nurses, d, "D白", fl, avoid_head=True)
             day_aide = _pick(aides, d, "D白", fl)
             night_aide = _pick(aides, d, "E小夜", fl) or _pick(aides, d, "N大夜", fl)
             out[fl][str(d)] = {

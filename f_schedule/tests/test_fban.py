@@ -195,6 +195,61 @@ def test_docgen_namecopy():
     eq("2F夜班照服=台籍(非外籍)", a["2F"]["1"]["夜班照服"], "台N")
 
 
+def _mk_head(name, block, record, per_day, is_head=False):
+    p = _mk(name, block, record, per_day)
+    p["is_head"] = is_head
+    return p
+
+def test_docgen_avoid_head_nurse():
+    """同日同樓層兩位白班：責任護士取實際護理，跳過護理長(is_head)。"""
+    from fban import docgen
+    # 護理長排在前面，仍應取後面的實際責任護士
+    conv = [_mk_head("護理長", "護理", "護理長", {1: ("D白", "2F")}, is_head=True),
+            _mk_head("曾素靖", "護理", "曾素靖", {1: ("D白", "2F")}, is_head=False)]
+    data = docgen.restraint_floor_data(conv, 3)
+    eq("2F白避開護理長→曾素靖", data[1]["2F"]["白班"], "曾素靖")
+    # 只有護理長在該樓白班時，仍要顯示護理長（不留白）
+    conv2 = [_mk_head("護理長", "護理", "護理長", {1: ("D白", "3F")}, is_head=True)]
+    data2 = docgen.restraint_floor_data(conv2, 3)
+    eq("3F只剩護理長→仍取護理長", data2[1]["3F"]["白班"], "護理長")
+
+def test_readfban_real_format():
+    """機構原生版面：多分頁依月份挑、欄位靠標題對位、theme/RGB 底色判樓層、護理長班種D0。"""
+    import openpyxl
+    from openpyxl.styles import PatternFill
+    cfg = make_cfg()
+    wb = openpyxl.Workbook()
+    wb.active.title = "115.08"          # 舊月份（不應被選到）
+    wb.active["A1"] = "舊月份不選"
+    ws = wb.create_sheet("115.09")      # 目標月份
+    # 日期列：從第 11 欄起 1..30
+    for d in range(1, 31):
+        ws.cell(4, 10 + d, d)
+    # 區塊表頭列
+    hdr = {4: "帳號", 5: "核章人員", 6: "護理人員", 7: "班種"}
+    for c, v in hdr.items():
+        ws.cell(5, c, v)
+    green = PatternFill("solid", fgColor="FF70AD47")   # 2F
+    # 護理長(班種 D0)與實際護理，第1日都 2F 白
+    ws.cell(6, 4, "R001"); ws.cell(6, 5, "顏欣盈"); ws.cell(6, 6, "顏欣盈"); ws.cell(6, 7, "D0")
+    ws.cell(6, 11, "D4x").fill = green
+    ws.cell(7, 4, "R190"); ws.cell(7, 6, "曾素靖")   # 核章空→用姓名
+    ws.cell(7, 11, "D4x").fill = green
+    tmp = _os.path.join(tempfile.gettempdir(), "test_real_F.xlsx")
+    wb.save(tmp)
+    conv, nd = read_fban.load(tmp, cfg, "115.09")
+    eq("依月份挑到 115.09(30天)", nd, 30)
+    names = {p["name"] for p in conv if p["block"] == "護理"}
+    check("讀到護理兩人", names == {"顏欣盈", "曾素靖"}, f"got={names}")
+    byname = {p["name"]: p for p in conv}
+    eq("底色判樓層=2F", byname["曾素靖"]["days"][1]["floor"], "2F")
+    eq("班種D0→is_head", byname["顏欣盈"]["is_head"], True)
+    eq("核章空→回姓名", byname["曾素靖"]["record_name"], "曾素靖")
+    from fban import docgen
+    data = docgen.restraint_floor_data(conv, nd)
+    eq("責任護士避開護理長→曾素靖", data[1]["2F"]["白班"], "曾素靖")
+
+
 def _mk_full(name, block, rec, per, cfg):
     """建立含 color 的 converted person（供 writer 寫出）。"""
     days = {}
@@ -251,6 +306,35 @@ def test_readfban_feeds_docgen():
     eq("2F白=顏欣盈", data[1]["2F"]["白班"], "顏欣盈")
     eq("大夜=何承祐", data[1]["2F"]["大夜"], "何承祐")
     eq("小夜=黃安宇", data[1]["2F"]["小夜"], "黃安宇")
+
+
+def test_readfban_roundtrip_blocks():
+    """迴歸：F班寫出→讀回，三個區塊要各自還原，不能全部落到護理。
+    （writer 在表頭上一列寫的是「護理人員／台籍照服員／外籍照服員」全稱，
+      read_fban 若只認短稱，會把每個人都當成護理，照護表的照服欄就會全空。）"""
+    from fban import docgen
+    cfg = make_cfg(週起始星期=6)
+    conv = [
+        _mk_full("護理甲", "護理", "護理甲",
+                 {**{d: "D4x" for d in range(1, 32)}, **{("fl", d): "2F" for d in range(1, 32)}}, cfg),
+        # 樓層須挑測試設定中有顏色規則者（台籍照服白=5F、外籍照服白=3F）
+        _mk_full("台照乙", "台籍照服", "台照乙",
+                 {**{d: "D5x" for d in range(1, 32)}, **{("fl", d): "5F" for d in range(1, 32)}}, cfg),
+        _mk_full("外照丙", "外籍照服", "外照丙",
+                 {**{d: "Dx" for d in range(1, 32)}, **{("fl", d): "3F" for d in range(1, 32)}}, cfg),
+    ]
+    tmp = _os.path.join(tempfile.gettempdir(), "test_rt_blocks.xlsx")
+    writer.write(conv, 31, cfg, tmp, "115.08")
+    conv2, nd = read_fban.load(tmp, cfg)
+    got = {p["name"]: p["block"] for p in conv2}
+    eq("護理甲 區塊=護理", got.get("護理甲"), "護理")
+    eq("台照乙 區塊=台籍照服", got.get("台照乙"), "台籍照服")
+    eq("外照丙 區塊=外籍照服", got.get("外照丙"), "外籍照服")
+    # 區塊對了，照護表的「白班照服」才取得到台籍照服員
+    assigns = docgen.namecopy_assignments(conv2, nd)
+    eq("照護表2F白班護理=護理甲", assigns["2F"]["1"]["白班護理"], "護理甲")
+    eq("照護表5F白班照服=台照乙(只取台籍)", assigns["5F"]["1"]["白班照服"], "台照乙")
+    eq("照護表3F白班照服不取外籍", assigns["3F"]["1"]["白班照服"], "")
 
 
 def run():

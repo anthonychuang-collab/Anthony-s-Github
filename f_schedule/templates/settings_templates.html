@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>後台範本設定｜大眾長照體系</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="大眾長照體系">
+    <div class="t">F 班自動排定系統<small>大眾長照體系 · 護理之家排班</small></div>
+    <div class="sp"></div>
+    <a class="out" href="/">回首頁</a>
+  </div>
+</header>
+<div class="wrap" style="max-width:760px">
+  <h1 style="color:var(--forest)">⚙️ 後台範本設定</h1>
+  <p class="lead">照護表各樓層的 Word 範本在這裡<b>存一次</b>就好，之後每月產出照護表都會自動沿用，
+     不用每次上傳。範本改版時，回這裡更換即可。</p>
+  {% if msg %}<div class="ok" style="background:#eef5ea;border:1px solid #cfe3c6;color:var(--forest);padding:10px 14px;border-radius:10px;margin:10px 0">✓ {{ msg }}</div>{% endif %}
+  {% if err %}<div class="err">⚠️ {{ err }}</div>{% endif %}
+
+  <div class="card">
+    <h3 style="font-size:16px;margin-top:0">住民日常生活照護表 · 樓層範本</h3>
+    {% for fl in ['2F','3F','5F'] %}
+    {% set st = status[fl] %}
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-top:1px solid #ececec">
+      <div class="num" style="flex:0 0 34px;height:34px">{{ fl }}</div>
+      <div style="flex:1;min-width:0">
+        {% if st.set %}
+          <b style="color:var(--forest)">已設定 ✓</b>
+          <span style="font-size:12.5px;color:var(--sub)">　更新於 {{ st.mtime }}</span>
+        {% else %}
+          <b style="color:#b06a2e">未設定</b>
+          <span style="font-size:12.5px;color:var(--sub)">　此樓層照護表尚無法產出</span>
+        {% endif %}
+      </div>
+      <form method="post" action="/settings/templates" enctype="multipart/form-data"
+            style="display:flex;align-items:center;gap:8px;margin:0">
+        <input type="hidden" name="floor" value="{{ fl }}">
+        <input type="file" name="tpl" accept=".docx" required style="max-width:190px;font-size:12.5px">
+        <button type="submit" style="width:auto;padding:8px 16px;margin:0;font-size:13px">
+          {{ '更換' if st.set else '上傳' }}</button>
+      </form>
+      {% if st.set %}
+      <form method="post" action="/settings/templates" style="margin:0"
+            onsubmit="return confirm('確定移除 {{ fl }} 照護表範本？');">
+        <input type="hidden" name="floor" value="{{ fl }}">
+        <input type="hidden" name="action" value="remove">
+        <button type="submit" style="width:auto;padding:8px 14px;margin:0;font-size:13px;background:#efe7e3;color:#8a5a3a">移除</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <p style="font-size:12.5px;color:var(--sub)">
+    範本存放在主機的 <code>後台範本/</code> 資料夾（比照人事資料保管，不對外連線）。
+    約束評估記錄單為固定格式，範本已內建、無需在此設定。</p>
+  <a class="back" href="/">← 回首頁</a>
+  <div class="slogan" style="text-align:center;font-size:12.5px;margin-top:18px">堅持熱忱｜讓愛茁壯｜散播歡樂</div>
+</div>
+</body>
+</html>

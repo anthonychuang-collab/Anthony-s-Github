@@ -29,7 +29,8 @@ fban/                 核心套件（純邏輯，無 web 相依）
 ├─ coverage.py        設立標準＋勞基法檢核
 ├─ fillin.py          自動補人頭（含少休機制）
 ├─ writer.py          寫出 F 班 xlsx（四區塊+底色+統計）
-├─ read_fban.py       讀回本系統格式 F 班 xlsx（依底色判樓層）← 上傳路徑用
+├─ read_fban.py       讀 F 班 xlsx（機構原生多分頁＋本系統格式；標題對位、theme色解析、依月份挑分頁）← 上傳路徑用
+├─ pdfexport.py       docx→PDF（LibreOffice soffice；找不到則只給 Word）
 └─ docgen.py          下游文件：呼叫 docskills 的 gen_form / fill_care_record
 generate_fban.py      CLI 主流程 run()（回傳 summary dict）
 app.py                Flask 網頁：登入 + 產F班 + 上傳F班 + 文件工作流
@@ -53,5 +54,8 @@ tests/test_fban.py    自製零依賴測試（60項）
 - 樓層色：2F綠FF70AD47 / 3F藍FF5B9BD5 / 5F紅FFFF2F92；護理小夜橘、大夜灰。
 - 例/休/國依〈年度行事曆〉每月配額；例假數嚴守配額，例假硬底線=每14天≥2。
 - 文件產生**不需 LibreOffice/字型**（標楷體於 Mac 開檔時算繪）。
+- 照護表範本存後台 `後台範本/照護表_{2F,3F,5F}.docx`（`/settings/templates` 維護），產文件時優先用後台範本，工作流當次上傳＝臨時覆蓋。約束表範本內建。
+- 上傳 F 班：`read_fban.load(path, cfg, month)` 依月份挑分頁；欄位靠標題（帳號/核章人員/區塊名/班種）自動對位；樓層由儲存格底色（含 theme color→RGB）比對後台〈樓層顏色規則〉。同日同樓層多位白班時，`docgen._pick(..., avoid_head=True)` 會跳過護理長（班種 D0，`read_fban.HEAD_KINDS`）取實際責任護士。
+- 每份文件同時輸出 PDF（`pdfexport`，soffice）。app 上傳路徑有低人數警告防呆。
 - 環境變數：`FBAN_PASSWORD`（存取密碼）、`FBAN_HOST`/`FBAN_PORT`、`FBAN_SECRET`。
 - 詳細規格見 `F班系統_規格書PRD.md`。
