@@ -254,9 +254,12 @@ def load(xlsx_path, cfg, month_label=None):
                            "is_work": cat in ("D白", "E小夜", "N大夜")}
             sk = str(shift_kind).strip() if shift_kind else ""
             converted.append({
-                "name": name,           # 名冊欄（護理人員/照服員）＝人頭名，文件顯示用
-                "record_name": name,    # 文件一律用名冊欄姓名（非「核章人員」欄）
-                "stamp": (str(stamp).strip() if stamp else ""),  # 核章人員欄（僅參考）
+                "name": name,           # 名冊欄（護理人員/照服員）＝實際上班的同仁
+                # 下游文件一律印牌照持有人：有核章人員欄就用它，沒有就是本人。
+                # 與「T班→F班」那條路徑的 config.Person.record_name 語意一致。
+                "record_name": (str(stamp).strip() if stamp and str(stamp).strip()
+                                else name),
+                "stamp": (str(stamp).strip() if stamp else ""),  # 核章人員欄原值
                 "account": str(account or "").strip(),
                 "block": block,
                 "shift_kind": sk,

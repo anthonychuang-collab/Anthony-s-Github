@@ -46,7 +46,7 @@ tests/test_fban.py    自製零依賴測試（60項）
 2. **上傳**：上傳本系統格式 F 班 xlsx → `read_fban.load()`（讀底色還原 converted）→ 工作流。
 
 `converted` 是核心資料結構：`[{name, record_name, block, n_days, days:{d:{code,cat,floor,color,is_work}}}]`。
-下游文件由 `docgen` 從 converted 直接產生（不再讀色），姓名一律用 `record_name`（人頭牌照持有人＝核章）。
+下游文件由 `docgen` 從 converted 直接產生（不再讀色），姓名一律用 `record_name`（人頭牌照持有人＝核章）。兩條路徑的 `record_name` 語意必須一致：`config.Person.record_name` 與 `read_fban` 都取核章人員欄、留空才用本人；`tests/test_head_name_same_on_both_paths` 鎖住這點。
 
 ## 慣例／注意
 

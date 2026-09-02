@@ -288,7 +288,8 @@ def test_readfban_roundtrip():
     eq("顏欣盈 第1日=D白", byname["顏欣盈"]["days"][1]["cat"], "D白")
     eq("顏欣盈 第1日樓層=2F(由底色)", byname["顏欣盈"]["days"][1]["floor"], "2F")
     eq("何承祐 第1日=N大夜", byname["何承祐"]["days"][1]["cat"], "N大夜")
-    eq("陳詡善顯示用名冊名(非核章)", byname["陳詡善"]["record_name"], "陳詡善")
+    eq("陳詡善文件用名=陳淑萍(牌照持有人)", byname["陳詡善"]["record_name"], "陳淑萍")
+    eq("陳詡善名冊欄=陳詡善(實際同仁)", byname["陳詡善"]["name"], "陳詡善")
     eq("陳詡善核章欄另存=陳淑萍", byname["陳詡善"]["stamp"], "陳淑萍")
 
 def test_readfban_feeds_docgen():
@@ -370,6 +371,28 @@ def test_readfban_roundtrip_blocks():
     eq("照護表2F白班護理=護理甲", assigns["2F"]["1"]["白班護理"], "護理甲")
     eq("照護表5F白班照服=台照乙(只取台籍)", assigns["5F"]["1"]["白班照服"], "台照乙")
     eq("照護表3F白班照服不取外籍", assigns["3F"]["1"]["白班照服"], "")
+
+
+def test_head_name_same_on_both_paths():
+    """迴歸：人頭在兩條路徑上，文件印的姓名必須一致（皆為牌照持有人）。
+    路徑一＝T班轉出的 converted；路徑二＝寫出F班再讀回。
+    read_fban 若改成取名冊欄姓名，這裡會抓到兩條路徑不一致。"""
+    cfg = make_cfg(週起始星期=6)
+    cb = CodeBook(CODE_MAP)
+    # 路徑一：後台主檔有核章人員(牌照持有人)
+    p1 = convert_person(Person(name="陳詡善", block="護理", stamp_name="陳淑萍"),
+                        days_from(["Di"] * 31), cb, cfg)
+    eq("路徑一 文件用名=陳淑萍", p1["record_name"], "陳淑萍")
+    # 路徑二：把同一個人寫進 F 班再讀回
+    conv = [_mk_full("陳詡善", "護理", "陳淑萍",
+                     {**{d: "D4x" for d in range(1, 32)},
+                      **{("fl", d): "2F" for d in range(1, 32)}}, cfg)]
+    tmp = _os.path.join(tempfile.gettempdir(), "test_head_paths.xlsx")
+    writer.write(conv, 31, cfg, tmp, "115.08")
+    conv2, _ = read_fban.load(tmp, cfg)
+    p2 = next(x for x in conv2 if x["name"] == "陳詡善")
+    eq("路徑二 文件用名=陳淑萍", p2["record_name"], "陳淑萍")
+    eq("兩條路徑文件用名一致", p1["record_name"], p2["record_name"])
 
 
 def run():
