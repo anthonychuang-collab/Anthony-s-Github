@@ -109,6 +109,43 @@ def blank_out_of_range_days(table, day_map, days_in_month):
                 clear_cell(row.cells[col_idx])
 
 
+def _row_height_val(row):
+    trPr = row._tr.find(qn("w:trPr"))
+    if trPr is None:
+        return 0
+    h = trPr.find(qn("w:trHeight"))
+    if h is None:
+        return 0
+    v = h.get(qn("w:val"))
+    return int(v) if v and v.isdigit() else 0
+
+
+def set_row_height(row, val):
+    """把列高設為至少 val（twips），避免責任護士列比照服員列小。"""
+    tr = row._tr
+    trPr = tr.find(qn("w:trPr"))
+    if trPr is None:
+        trPr = tr.makeelement(qn("w:trPr"), {})
+        tr.insert(0, trPr)
+    h = trPr.find(qn("w:trHeight"))
+    if h is None:
+        h = trPr.makeelement(qn("w:trHeight"), {})
+        trPr.append(h)
+    h.set(qn("w:val"), str(val))
+    h.set(qn("w:hRule"), "atLeast")
+
+
+def equalize_name_rows(table, roles):
+    """責任護士列高度＝各姓名列的最大值，讓它不比照服員列小。"""
+    rows = [table.rows[ri] for ri in roles.values()]
+    if not rows:
+        return
+    target = max([_row_height_val(r) for r in rows] + [260])
+    nd = roles.get("nurse_day")
+    if nd is not None:
+        set_row_height(table.rows[nd], target)
+
+
 def find_special_rows(table):
     roles = {}
     for ri, row in enumerate(table.rows):
@@ -181,9 +218,15 @@ def fill(template_path, assignments_path, floor, output_path):
             continue
         blank_out_of_range_days(table, day_map, days_in_month)
         lock_table_layout(table)
+        equalize_name_rows(table, roles)
+        # 每個姓名列先整列清空（日期欄起），再只填當月有效日；
+        # 如此超出當月天數的欄位（如 9 月的第 31 欄、或範本右側多出的空欄）一律留白。
+        first_day_col = min(day_map.values())
         for role, row_idx in roles.items():
             category = CATEGORY_BY_ROLE[role]
             row = table.rows[row_idx]
+            for ci in range(first_day_col, len(row.cells)):
+                clear_cell(row.cells[ci])
             for day, col_idx in day_map.items():
                 if days_in_month is not None and day > days_in_month:
                     continue

@@ -49,13 +49,22 @@ def _pick(people, day, cat, floor=None, avoid_head=False):
     return fallback
 
 
+def institution_last_night(converted, n_days):
+    """該月最後一天的大夜護理（跨月銜接用：本月最後一天大夜＝下月1日的大夜格）。"""
+    return _pick(_nurses(converted), n_days, "N大夜")
+
+
 # ---------------- 約束評估記錄單 ----------------
-def restraint_floor_data(converted, n_days):
-    """{day:{'2F':{大夜,白班,小夜}, '3F':..., '5F':...}}（護理核章姓名）。"""
+def restraint_floor_data(converted, n_days, prev_night=""):
+    """{day:{'2F':{大夜,白班,小夜}, '3F':..., '5F':...}}（護理姓名）。
+
+    大夜班跨午夜：約束表第 D 天凌晨 00:00~08:00 的大夜，是「班表第 (D-1) 天大夜」
+    那位護理值到隔天早上。故大夜往前推一天；第 1 天用上月最後一天大夜（prev_night）。
+    """
     nurses = _nurses(converted)
     data = {}
     for d in range(1, n_days + 1):
-        night = _pick(nurses, d, "N大夜")
+        night = prev_night if d == 1 else _pick(nurses, d - 1, "N大夜")
         eve = _pick(nurses, d, "E小夜")
         data[d] = {}
         for fl in FLOORS:
@@ -67,10 +76,10 @@ def restraint_floor_data(converted, n_days):
     return data
 
 
-def build_restraint(converted, n_days, roc_year, month, outdir):
+def build_restraint(converted, n_days, roc_year, month, outdir, prev_night=""):
     import gen_form
     os.makedirs(outdir, exist_ok=True)
-    data = restraint_floor_data(converted, n_days)
+    data = restraint_floor_data(converted, n_days, prev_night)
     paths = []
     for fl in FLOORS:
         assign = {d: data[d][fl] for d in data}

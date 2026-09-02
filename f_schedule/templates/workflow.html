@@ -24,6 +24,15 @@
       （前 4 列大夜、中 4 列白班、後 4 列小夜）。範本已內建，直接產出即可。
       每份會同時附一份 <b>PDF（定版，避免換電腦開啟時版面跑掉）</b>。</p>
     <form method="post" action="/make/restraint/{{ token }}">
+      <div style="background:#f6f8f4;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+        <label class="fld" style="font-size:13.5px">上月最後一天（前一日）大夜護理　<span class="hint">．供本月 1 日凌晨大夜格</span></label>
+        <input type="text" name="prev_night" value="{{ prev_night }}" placeholder="例：洪靜玟"
+               style="max-width:200px">
+        <div style="font-size:12px;color:var(--sub);margin-top:6px">
+          大夜班跨午夜：本月 1 日 00:00~08:00 的大夜，是上月最後一天大夜那位護理。
+          {% if prev_night %}已自動由上月分頁帶入「{{ prev_night }}」，可修改。{% else %}上傳檔若含上月分頁會自動帶入；沒有請手動填。{% endif %}
+        </div>
+      </div>
       <button type="submit" style="max-width:280px">產出約束評估記錄單（Word＋PDF）</button>
     </form>
   </div>

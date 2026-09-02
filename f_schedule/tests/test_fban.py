@@ -178,10 +178,11 @@ def test_docgen_restraint():
     conv = [_mk("護A","護理","牌照A",{1:("D白","2F"),2:("D白","3F")}),
             _mk("護B","護理","護B",{1:("N大夜",None)}),
             _mk("護C","護理","護C",{1:("E小夜",None)})]
-    data = docgen.restraint_floor_data(conv, 3)
+    data = docgen.restraint_floor_data(conv, 3, prev_night="前月大夜")
     eq("2F白=牌照A", data[1]["2F"]["白班"], "牌照A")
-    eq("大夜共用護B", data[1]["2F"]["大夜"], "護B")
-    eq("小夜共用護C", data[1]["3F"]["小夜"], "護C")
+    eq("第1天大夜=上月最後一天", data[1]["2F"]["大夜"], "前月大夜")
+    eq("第2天大夜=班表第1天大夜(往前推一天)", data[2]["2F"]["大夜"], "護B")
+    eq("小夜共用護C(當日)", data[1]["3F"]["小夜"], "護C")
 
 def test_docgen_namecopy():
     from fban import docgen
@@ -287,7 +288,8 @@ def test_readfban_roundtrip():
     eq("顏欣盈 第1日=D白", byname["顏欣盈"]["days"][1]["cat"], "D白")
     eq("顏欣盈 第1日樓層=2F(由底色)", byname["顏欣盈"]["days"][1]["floor"], "2F")
     eq("何承祐 第1日=N大夜", byname["何承祐"]["days"][1]["cat"], "N大夜")
-    eq("陳詡善核章=陳淑萍(人頭還原)", byname["陳詡善"]["record_name"], "陳淑萍")
+    eq("陳詡善顯示用名冊名(非核章)", byname["陳詡善"]["record_name"], "陳詡善")
+    eq("陳詡善核章欄另存=陳淑萍", byname["陳詡善"]["stamp"], "陳淑萍")
 
 def test_readfban_feeds_docgen():
     """US-7→US-8：讀回的資料能正確產生約束表指派。"""
@@ -302,10 +304,43 @@ def test_readfban_feeds_docgen():
     tmp = _os.path.join(tempfile.gettempdir(), "test_rt_F2.xlsx")
     writer.write(conv, 31, cfg, tmp, "115.08")
     conv2, nd = read_fban.load(tmp, cfg)
-    data = docgen.restraint_floor_data(conv2, nd)
+    data = docgen.restraint_floor_data(conv2, nd, prev_night="上月大夜")
     eq("2F白=顏欣盈", data[1]["2F"]["白班"], "顏欣盈")
-    eq("大夜=何承祐", data[1]["2F"]["大夜"], "何承祐")
+    eq("第1天大夜=上月最後一天", data[1]["2F"]["大夜"], "上月大夜")
+    eq("第2天大夜=何承祐(往前推一天)", data[2]["2F"]["大夜"], "何承祐")
     eq("小夜=黃安宇", data[1]["2F"]["小夜"], "黃安宇")
+
+
+def test_namecopy_blank_31_in_30day_month():
+    """9 月（30天）：照護表第 31 欄（及右側多餘欄）不得有姓名。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    import sys as _sys
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    import importlib, json
+    fcr = importlib.import_module("fill_care_record")
+    # 造一個含 1..31 日欄 + 責任護士列的最小範本，並在第 31 欄預填殘留姓名
+    d = Document()
+    d.add_paragraph("115 年 9 月  姓名:")
+    t = d.add_table(rows=2, cols=1 + 31)
+    t.rows[0].cells[0].text = "日期"
+    for day in range(1, 32):
+        t.rows[0].cells[day].text = str(day)
+    t.rows[1].cells[0].text = "責任護士 簽名"
+    t.rows[1].cells[31].text = "殘留人"          # 第31欄殘留
+    tmp = _os.path.join(tempfile.gettempdir(), "tpl_care.docx"); d.save(tmp)
+    aj = _os.path.join(tempfile.gettempdir(), "asg.json")
+    with open(aj, "w", encoding="utf-8") as f:
+        json.dump({"2F": {str(x): {"白班護理": f"護{x}"} for x in range(1, 31)}}, f, ensure_ascii=False)
+    out = _os.path.join(tempfile.gettempdir(), "care_out.docx")
+    fcr.fill(tmp, aj, "2F", out)
+    d2 = Document(out); row = d2.tables[0].rows[1]
+    eq("第30欄有名", row.cells[30].text.strip(), "護30")
+    eq("第31欄留白(9月無31)", row.cells[31].text.strip(), "")
 
 
 def test_readfban_roundtrip_blocks():

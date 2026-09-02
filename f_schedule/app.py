@@ -109,6 +109,34 @@ def _guess_month():
     return f"{now.year - 1911}.{now.month:02d}"
 
 
+def _prev_month_label(month):
+    """'115.09' → '115.08'；'115.01' → '114.12'。"""
+    try:
+        roc, mon = month.split(".")
+        roc, mon = int(roc), int(mon)
+        mon -= 1
+        if mon == 0:
+            mon = 12
+            roc -= 1
+        return f"{roc}.{mon:02d}"
+    except Exception:
+        return None
+
+
+def _detect_prev_night(path, cfg, month):
+    """從同一活頁簿的上月分頁自動抓最後一天大夜護理（跨月銜接約束表第1天）。抓不到回空字串。"""
+    pl = _prev_month_label(month)
+    if not pl:
+        return ""
+    try:
+        pconv, pnd = read_fban.load(path, cfg, pl)
+        if pconv:
+            return docgen.institution_last_night(pconv, pnd) or ""
+    except Exception:
+        pass
+    return ""
+
+
 @app.route("/")
 @login_required
 def index():
@@ -199,9 +227,10 @@ def docs_home():
                                      f"疑似欄位或月份分頁對不上，已中止以免產出空白表單。"
                                      f"請確認上傳檔含『{month}』分頁且版面正確。")
     m = month.split(".")
+    prev_night = _detect_prev_night(path, cfg, month)
     JOBS[token] = {"month": month, "converted": converted, "n_days": n_days,
                    "roc": int(m[0]), "mon": int(m[1]), "dir": job_dir,
-                   "out": path, "report": None}
+                   "out": path, "report": None, "prev_night": prev_night}
     return redirect(url_for("workflow", token=token))
 
 
@@ -244,7 +273,8 @@ def workflow(token):
     if not job:
         abort(404)
     return render_template("workflow.html", token=token, month=job["month"],
-                           care_status=_care_tpl_status())
+                           care_status=_care_tpl_status(),
+                           prev_night=job.get("prev_night", ""))
 
 
 @app.route("/make/restraint/<token>", methods=["POST"])
@@ -254,7 +284,10 @@ def make_restraint(token):
     if not job:
         abort(404)
     outdir = os.path.join(job["dir"], "restraint")
-    paths = docgen.build_restraint(job["converted"], job["n_days"], job["roc"], job["mon"], outdir)
+    prev_night = (request.form.get("prev_night") or "").strip() or job.get("prev_night", "")
+    job["prev_night"] = prev_night
+    paths = docgen.build_restraint(job["converted"], job["n_days"], job["roc"],
+                                   job["mon"], outdir, prev_night=prev_night)
     paths = _with_pdfs(paths, outdir)
     return _zip_files(paths, f"{job['month']}_約束評估記錄單.zip")
 
@@ -282,7 +315,7 @@ def make_namecopy(token):
                 templates[fl] = sp
     if not templates:
         return render_template("workflow.html", token=token, month=job["month"],
-                               care_status=_care_tpl_status(),
+                               care_status=_care_tpl_status(), prev_night=job.get("prev_night", ""),
                                error="尚未設定任何樓層的照護表範本。請先到「後台範本設定」上傳，或在此當場上傳。")
     outdir = os.path.join(job["dir"], "namecopy")
     paths = docgen.build_namecopy(job["converted"], job["n_days"], job["roc"], job["mon"], templates, outdir)
@@ -290,7 +323,7 @@ def make_namecopy(token):
         paths = _with_pdfs(paths, outdir)
     if not paths:
         return render_template("workflow.html", token=token, month=job["month"],
-                               care_status=_care_tpl_status(),
+                               care_status=_care_tpl_status(), prev_night=job.get("prev_night", ""),
                                error="產出失敗：範本結構可能與預期不符")
     return _zip_files(paths, f"{job['month']}_住民日常生活照護表.zip")
 
