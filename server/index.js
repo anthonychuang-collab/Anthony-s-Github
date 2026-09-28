@@ -32,10 +32,19 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // --- 前端靜態檔案 ---
 const publicDir = path.join(__dirname, '..', 'public');
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, {
+  setHeaders: (res, filePath) => {
+    // HTML 每次都跟伺服器重新驗證，確保更新程式後瀏覽器一定拿到新版（避免看到舊快取）；
+    // vendor 的大型函式庫等其他靜態檔仍可正常快取。
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 // 其他非 /api 的路徑都回傳前端首頁（單頁應用）
 app.get(/^(?!\/api).*/, (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
