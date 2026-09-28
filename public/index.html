@@ -55,7 +55,7 @@
 <title>線東大眾護理之家 · 機構排班系統</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#ECF3E3; --bg-paper:#EFEEE7; --surface:#FFFFFF; --ink:#1F2A1D; --muted:#7C8B72;
@@ -67,7 +67,7 @@
     --weekend-tint:#F5EFDD;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans TC',sans-serif;-webkit-font-smoothing:antialiased;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans TC','PingFang TC','PingFang SC','Microsoft JhengHei','Heiti TC',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
   .app{max-width:1400px;margin:0 auto;padding:0 20px 0;}
 
   .topnav{display:flex;justify-content:center;gap:8px;padding:14px 0 0;}
@@ -144,6 +144,13 @@
   }
   .code-ref-chip:hover{filter:brightness(0.95);transform:translateY(-1px);}
   .code-ref-chip:active{transform:translateY(0);}
+  .merged-picker summary{cursor:pointer;font-weight:700;font-size:12.5px;color:var(--muted);}
+  .merged-dept{margin:8px 0;}
+  .merged-dept-head{font-size:12px;font-weight:800;color:var(--primary-deep);display:inline-flex;align-items:center;gap:6px;cursor:pointer;}
+  .merged-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .merged-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface);cursor:pointer;}
+  .merged-chip.ro{opacity:.6;}
+  tr.merged-sep td{background:var(--primary-soft);color:var(--primary-deep);font-weight:800;font-size:11.5px;padding:4px 8px;text-align:left;}
   .shift-cell select{width:100%;height:100%;border:none;background:transparent;font-size:10.5px;font-weight:800;text-align:center;text-align-last:center;}
 
   tr.summary-row td.name-cell{font-size:10px;font-weight:700;color:var(--muted);background:#F0F2E9;}
@@ -267,6 +274,7 @@
         <button class="auto-btn" id="importBtn" style="background:var(--amber-deep);">⭱ 匯入 Excel</button>
         <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;">
         <button class="auto-btn" id="printBtn" style="background:#5C6B52;">🖨 列印班表(A4橫式)</button>
+        <button class="auto-btn" id="toggleMergedBtn" style="background:#2F7F86;">🔀 合併檢視</button>
         <button class="auto-btn" id="toggleDraftBtn" style="background:#6A5ACD;">📑 對照版班表</button>
       </div>
     </div>
@@ -317,6 +325,22 @@
       </div>
     </div>
 
+    <div class="panel" id="mergedPanel" style="display:none;">
+      <h3>🔀 合併檢視(跨部門同仁放在同一張表)</h3>
+      <div class="hint" style="margin-top:0;margin-bottom:8px;">把工作上有關聯的同仁,不分部門放在同一張表裡對照與微調。<b>這裡改的就是正式班表</b>,會同步反映在各職務自己的頁籤;你沒有編輯權限的部門,列會呈現為只能看、不能改。操作方式跟正式班表一樣(點格輸入、方向鍵移動、拖曳多選、Delete清除、Ctrl+C/V/Z)。拖曳姓名前的「⠿」可以調整順序(限同一個部門內,會同步到各職務頁籤)。</div>
+      <details id="mergedPicker" class="merged-picker" open>
+        <summary>選擇要合併顯示的同仁(<span id="mergedPickerCount">0/0</span>)</summary>
+        <div class="db-actions" style="margin:8px 0;">
+          <button id="mergedSelectAll" style="background:var(--muted);">全選</button>
+          <button id="mergedSelectNone" style="background:var(--muted);">全部取消</button>
+        </div>
+        <div id="mergedPickerBody"></div>
+      </details>
+      <div class="grid-wrap" style="margin-top:12px;">
+        <table class="schedule" id="mergedTable"></table>
+      </div>
+    </div>
+
     <div class="panel" id="draftPanel" style="display:none;">
       <h3>📑 對照版班表(草稿,不會影響正式班表)</h3>
       <div class="hint" style="margin-top:0;margin-bottom:8px;">這是一份獨立的草稿,可以自己排排看、跟上面的正式班表對照比較。操作方式跟正式班表一樣:點格子輸入、方向鍵移動、Ctrl+C/V/Z。存檔只會存在這份草稿裡,不會動到正式班表,除非你按「套用為正式班表」。</div>
@@ -337,7 +361,7 @@
     </div>
 
     <div class="brand-footer"></div>
-    <div class="footer-note">線東大眾護理之家 · 內部管理系統</div>
+    <div class="footer-note">線東大眾護理之家 · 內部管理系統 · v0.9</div>
   </div>
 
   <div id="adminView">
@@ -516,6 +540,12 @@ let monthCursor = new Date(); monthCursor.setDate(1); monthCursor.setHours(0,0,0
 let schedule = {};
 let draftSchedule = {};
 let draftPanelOpen = false;
+let mergedPanelOpen = false;
+let mergedItems = [];      // 合併檢視目前顯示的列(含所屬職務 role),依部門分組排序
+let mergedSelIds = null;   // Set:使用者勾選要合併顯示的人員 id
+let mergedSelUser = null;
+let mergedRenderToken = 0;
+let mergedDraggedId = null;
 let specialDays = [];
 let recurringRules = [];
 let leaveReqCache = {};
@@ -581,11 +611,14 @@ function customLeaveCategory(v){
 function isSpecialLeaveCode(v){
   return customLeaveCategory(v)==='special';
 }
+function isCompLeaveCode(v){
+  return customLeaveCategory(v)==='comp';
+}
 function isRegularLeaveCodeOnly(v){
   return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='regular';
 }
 function isWorkCode(v){ return !!v && v!=='休' && v!=='R1' && v!=='R2' && v!=='R' && v!=='/' && customLeaveCategory(v)===''; }
-function isRestCode(v){ return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='special' || customLeaveCategory(v)==='regular'; }
+function isRestCode(v){ return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='special' || customLeaveCategory(v)==='comp' || customLeaveCategory(v)==='regular'; }
 function uid(){ return 's'+Math.random().toString(36).slice(2,9); }
 
 function showToast(msg){
@@ -1200,7 +1233,7 @@ document.getElementById('builtinCodeTable').addEventListener('change', async (e)
   }
 });
 
-const LEAVE_CATEGORY_OPTIONS = [{v:'', t:'不算休假'}, {v:'special', t:'算特休天數'}, {v:'regular', t:'算一般休假天數'}];
+const LEAVE_CATEGORY_OPTIONS = [{v:'', t:'不算休假'}, {v:'special', t:'算特休天數'}, {v:'comp', t:'算補休天數'}, {v:'regular', t:'算一般休假天數'}];
 function ccColumns(){ return ['代碼','說明','顏色','計入休假統計']; }
 function ccToRow(c){ return [c.code||'', c.label||'', c.color||'blue', c.leaveCategory||'']; }
 function rowToCc(vals){ return {code:vals[0]||'', label:vals[1]||'', color:vals[2]||'blue', leaveCategory:vals[3]||''}; }
@@ -1955,26 +1988,28 @@ async function renderGrid(){
     const isWeekend = wd===0 || wd===6;
     head += `<th class="${isWeekend?'weekend':''}">${day}<br>${WD[wd]}</th>`;
   }
-  head += '<th style="min-width:55px;background:#DCE7CE;">休假<br>天數</th><th style="min-width:55px;background:#F5E3C8;">特休<br>天數</th><th style="min-width:55px;background:#CFE0C8;">合計</th>';
+  head += '<th style="min-width:55px;background:#DCE7CE;">休假<br>天數</th><th style="min-width:55px;background:#F5E3C8;">特休<br>天數</th><th style="min-width:55px;background:#E0D9EF;">補休<br>天數</th><th style="min-width:55px;background:#CFE0C8;">合計</th>';
   head += '</tr></thead>';
 
   let body = '<tbody>';
   items.forEach((p, rowIdx)=>{
     body += `<tr draggable="true" data-staff-id="${p.id}" class="staff-row-draggable"><td class="name-cell" style="cursor:grab;">⠿ ${p.name}</td><td class="code-cell" draggable="false">${p.code||''}</td>`;
-    let regularLeaveCount = 0, specialLeaveCount = 0;
+    let regularLeaveCount = 0, specialLeaveCount = 0, compLeaveCount = 0;
     for(let day=1; day<=nDays; day++){
       const ds = dateStr(monthCursor, day);
       const d = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
       const isWeekend = d.getDay()===0 || d.getDay()===6;
       const val = (monthData[p.id] && monthData[p.id][ds]) || '';
       if(isSpecialLeaveCode(val)) specialLeaveCount++;
+      else if(isCompLeaveCode(val)) compLeaveCount++;
       else if(isRegularLeaveCodeOnly(val)) regularLeaveCount++;
       const {cls, style} = cellStyleFor(val);
       body += `<td class="shift-cell ${cls} ${isWeekend?'weekend-col':''}" style="${style}" draggable="false" data-staff="${p.id}" data-date="${ds}" data-row="${rowIdx}" data-col="${day}">${displayCode(val)}</td>`;
     }
     body += `<td style="text-align:center;font-weight:800;background:#F0F5EA;color:var(--primary-deep);">${regularLeaveCount}</td>`;
     body += `<td style="text-align:center;font-weight:800;background:#FBF3E4;color:#9C7527;">${specialLeaveCount}</td>`;
-    body += `<td style="text-align:center;font-weight:800;background:#E6F0E1;color:#3D7A33;">${regularLeaveCount+specialLeaveCount}</td>`;
+    body += `<td style="text-align:center;font-weight:800;background:#F1EDF8;color:#6A4FA0;">${compLeaveCount}</td>`;
+    body += `<td style="text-align:center;font-weight:800;background:#E6F0E1;color:#3D7A33;">${regularLeaveCount+specialLeaveCount+compLeaveCount}</td>`;
     body += '</tr>';
   });
 
@@ -1996,7 +2031,7 @@ async function renderGrid(){
       const cls = count===0 ? 'zero' : (count < g.min ? 'low' : 'ok');
       body += `<td class="count-cell ${cls}">${count}</td>`;
     }
-    body += '<td></td><td></td><td></td>';
+    body += '<td></td><td></td><td></td><td></td>';
     body += '</tr>';
   });
 
@@ -2010,7 +2045,7 @@ async function renderGrid(){
       const isWeekend = wd===0 || wd===6;
       body += `<td style="text-align:center;font-weight:700;font-size:10.5px;background:${isWeekend?'var(--weekend-tint)':'#E7EDDD'};padding:4px 0;">${day}<br>${WD[wd]}</td>`;
     }
-    body += '<td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td></tr>';
+    body += '<td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td><td style="background:#E7EDDD;"></td></tr>';
 
     let maxLayers = 1;
     Object.values(eventMap).forEach(arr=>{ if(arr.length>maxLayers) maxLayers = arr.length; });
@@ -2027,7 +2062,7 @@ async function renderGrid(){
           body += `<td></td>`;
         }
       }
-      body += '<td></td><td></td><td></td></tr>';
+      body += '<td></td><td></td><td></td><td></td></tr>';
     }
   }
 
@@ -2193,6 +2228,8 @@ async function renderGrid(){
       return;
     }
 
+    // 修正:先讓輸入框的值等於貼上的第一格。否則貼完重繪、輸入框失焦時,舊值會回頭蓋掉第一格
+    target.value = matrix[0][0].trim();
     const anchorRow = parseInt(target.dataset.row);
     const anchorCol = parseInt(target.dataset.col);
     const monthData = await loadMonth();
@@ -2223,7 +2260,302 @@ async function renderGrid(){
     showToast(`已從剪貼簿貼上 ${changed} 個儲存格`);
     });
   }
+  if(mergedPanelOpen) await renderMergedGrid();
 }
+
+/* ---------- 合併檢視(跨部門同仁放在同一張表,直接讀寫正式班表) ---------- */
+function mergedAvailableRoles(){ return ROLES.filter(r=> canViewRole(r.key)); }
+async function loadMergedSelection(){
+  const uidNow = currentUser ? currentUser.id : null;
+  if(mergedSelIds && mergedSelUser===uidNow) return;
+  mergedSelUser = uidNow;
+  let ids = null;
+  try{ const s = await window.storage.get('merged-view-sel:'+uidNow, true); if(s && s.value) ids = JSON.parse(s.value); }catch(e){}
+  if(Array.isArray(ids)) mergedSelIds = new Set(ids);
+  else {
+    mergedSelIds = new Set();
+    mergedAvailableRoles().forEach(r=> staff[r.key].forEach(p=> mergedSelIds.add(p.id)));
+  }
+}
+function saveMergedSelection(){
+  if(!mergedSelUser) return;
+  storageSetRetry('merged-view-sel:'+mergedSelUser, JSON.stringify(Array.from(mergedSelIds)));
+}
+function renderMergedPicker(){
+  const box = document.getElementById('mergedPickerBody');
+  if(!box) return;
+  const roles = mergedAvailableRoles();
+  let total = 0, sel = 0, html = '';
+  roles.forEach(r=>{
+    const list = staff[r.key];
+    const n = list.filter(p=> mergedSelIds.has(p.id)).length;
+    total += list.length; sel += n;
+    html += `<div class="merged-dept"><label class="merged-dept-head"><input type="checkbox" class="merged-dept-cb" data-role="${r.key}" ${(list.length>0 && n===list.length)?'checked':''}> ${r.label}(${n}/${list.length})${canEditRole(r.key)?'':'・僅檢視'}</label><div class="merged-chips">` +
+      list.map(p=>`<label class="merged-chip${canEditRole(r.key)?'':' ro'}"><input type="checkbox" class="merged-staff-cb" data-id="${p.id}" ${mergedSelIds.has(p.id)?'checked':''}> ${p.name}</label>`).join('') +
+      `</div></div>`;
+  });
+  box.innerHTML = html || '<div class="empty-state">目前沒有可檢視的職務</div>';
+  box.querySelectorAll('.merged-dept-cb').forEach(cb=>{
+    const list = staff[cb.dataset.role];
+    const n = list.filter(p=> mergedSelIds.has(p.id)).length;
+    cb.indeterminate = n>0 && n<list.length;
+  });
+  document.getElementById('mergedPickerCount').textContent = `${sel}/${total}`;
+}
+
+function mergedCellCls(val, role){
+  if(!val) return 'empty';
+  if(builtinCodeColors[val] || customCodeInfo(val)) return 'custom-code';
+  return role==='nursing' ? codeClass(val) : (val==='早'?'white':val==='中'?'evening':val==='晚'?'admin-shift':val==='休'?'off':val==='/'?'blankshift':(val==='R1'||val==='R')?'leave-reserved':val==='R2'?'leave-company':'empty');
+}
+function mergedCellSty(val){
+  if(builtinCodeColors[val]){ const c = resolveColor(builtinCodeColors[val]); return `background:${c.bg} !important;color:${c.fg} !important;`; }
+  const custom = customCodeInfo(val);
+  if(custom){ const c = resolveColor(custom.color); return `background:${c.bg} !important;color:${c.fg} !important;`; }
+  return '';
+}
+
+async function renderMergedGrid(){
+  const token = ++mergedRenderToken;
+  const table = document.getElementById('mergedTable');
+  if(!table) return;
+  await loadMergedSelection();
+  const monthData = await loadMonth();
+  if(token !== mergedRenderToken) return; // 有更新的一次渲染在排隊,這次作廢
+  renderMergedPicker();
+
+  const nDays = daysInMonth(monthCursor);
+  mergedItems = [];
+  const groups = [];
+  mergedAvailableRoles().forEach(r=>{
+    const list = staff[r.key].filter(p=> mergedSelIds.has(p.id)).map(p=>({id:p.id, name:p.name, code:p.code, role:r.key}));
+    if(list.length){ groups.push({role:r, list}); list.forEach(x=> mergedItems.push(x)); }
+  });
+  if(mergedItems.length===0){
+    table.innerHTML = `<tbody><tr><td class="empty-state">請先在上方勾選要合併顯示的同仁</td></tr></tbody>`;
+    return;
+  }
+
+  let head = '<thead><tr><th style="min-width:90px;"></th>';
+  for(let day=1; day<=nDays; day++){
+    const wd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day).getDay();
+    head += `<th class="${wd===0||wd===6?'weekend':''}">${day}<br>${WD[wd]}</th>`;
+  }
+  head += '<th style="min-width:55px;background:#DCE7CE;">休假<br>天數</th><th style="min-width:55px;background:#F5E3C8;">特休<br>天數</th><th style="min-width:55px;background:#E0D9EF;">補休<br>天數</th><th style="min-width:55px;background:#CFE0C8;">合計</th></tr></thead>';
+
+  let body = '<tbody>';
+  let rowIdx = 0;
+  groups.forEach(g=>{
+    body += `<tr class="merged-sep"><td colspan="${nDays+5}"><span style="display:inline-block;position:sticky;left:8px;">${g.role.label}${canEditRole(g.role.key)?'':'(僅檢視)'}</span></td></tr>`;
+    g.list.forEach(p=>{
+      body += `<tr draggable="true" data-staff-id="${p.id}" data-role="${p.role}" class="staff-row-draggable"><td class="name-cell" style="cursor:grab;">⠿ ${p.name}</td>`;
+      let reg=0, spec=0, comp=0;
+      for(let day=1; day<=nDays; day++){
+        const ds = dateStr(monthCursor, day);
+        const wd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day).getDay();
+        const val = (monthData[p.id] && monthData[p.id][ds]) || '';
+        if(isSpecialLeaveCode(val)) spec++;
+        else if(isCompLeaveCode(val)) comp++;
+        else if(isRegularLeaveCodeOnly(val)) reg++;
+        body += `<td class="shift-cell ${mergedCellCls(val, p.role)} ${wd===0||wd===6?'weekend-col':''}" style="${mergedCellSty(val)}" draggable="false" data-staff="${p.id}" data-date="${ds}" data-row="${rowIdx}" data-col="${day}">${displayCode(val)}</td>`;
+      }
+      body += `<td style="text-align:center;font-weight:800;background:#F0F5EA;color:var(--primary-deep);">${reg}</td>`;
+      body += `<td style="text-align:center;font-weight:800;background:#FBF3E4;color:#9C7527;">${spec}</td>`;
+      body += `<td style="text-align:center;font-weight:800;background:#F1EDF8;color:#6A4FA0;">${comp}</td>`;
+      body += `<td style="text-align:center;font-weight:800;background:#E6F0E1;color:#3D7A33;">${reg+spec+comp}</td></tr>`;
+      rowIdx++;
+    });
+  });
+  body += '</tbody>';
+  table.innerHTML = head + body;
+
+  // 拖曳調整人員順序(順序是「各部門各自記錄」的,所以只能在同一個部門內調整,並會同步到各職務頁籤)
+  table.querySelectorAll('tr.staff-row-draggable').forEach(tr=>{
+    tr.addEventListener('dragstart', (e)=>{
+      mergedDraggedId = tr.dataset.staffId;
+      tr.style.opacity = '0.4';
+      if(e.dataTransfer){ e.dataTransfer.effectAllowed = 'move'; try{ e.dataTransfer.setData('text/plain', mergedDraggedId); }catch(_){} }
+    });
+    tr.addEventListener('dragend', ()=>{ tr.style.opacity = ''; });
+    tr.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      const dragged = mergedItems.find(x=>x.id===mergedDraggedId);
+      const sameDept = dragged && dragged.role===tr.dataset.role;
+      tr.style.boxShadow = sameDept ? 'inset 0 2px 0 var(--primary)' : 'inset 0 2px 0 var(--danger)';
+    });
+    tr.addEventListener('dragleave', ()=>{ tr.style.boxShadow = ''; });
+    tr.addEventListener('drop', async (e)=>{
+      e.preventDefault();
+      tr.style.boxShadow = '';
+      const targetId = tr.dataset.staffId, role = tr.dataset.role;
+      if(!mergedDraggedId || mergedDraggedId===targetId) return;
+      const dragged = mergedItems.find(x=>x.id===mergedDraggedId);
+      if(!dragged || dragged.role!==role){ showToast('人員順序是各部門各自記錄的,只能在同一個部門內拖曳調整'); return; }
+      if(!canEditRole(role)){ showToast('您的帳號對這個職務只有檢視權限,無法調整順序'); return; }
+      const arr = staff[role];
+      const fromIdx = arr.findIndex(x=>x.id===mergedDraggedId);
+      const toIdx = arr.findIndex(x=>x.id===targetId);
+      if(fromIdx<0 || toIdx<0) return;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      await saveStaff();
+      renderGrid();
+      await renderMergedGrid();
+      showToast('已調整人員排列順序(各職務頁籤同步)');
+    });
+  });
+
+  table.querySelectorAll('.shift-cell').forEach(cell=>{
+    cell.addEventListener('mousedown', (e)=>{
+      if(cell.querySelector('input')) return;
+      e.preventDefault();
+      isDragSelecting = true;
+      const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+      dragAnchor = {row:r, col:c};
+      setSelRange(r, c, r, c, 'merged');
+    });
+    cell.addEventListener('mouseenter', ()=>{
+      if(!isDragSelecting || !dragAnchor) return;
+      const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+      setSelRange(dragAnchor.row, dragAnchor.col, r, c, 'merged');
+    });
+    cell.onclick = async function(){
+      if(this.querySelector('input')) return;
+      const row = parseInt(this.dataset.row), col = parseInt(this.dataset.col);
+      const item = mergedItems[row];
+      if(!item) return;
+      if(!canEditRole(item.role)){
+        showToast(`您的帳號對「${ROLES.find(r=>r.key===item.role).label}」只有檢視權限,無法編輯`);
+        return;
+      }
+      clearSelRange();
+      const cellEl = this;
+      const sid = this.dataset.staff, ds = this.dataset.date;
+      const isWeekendCol = this.classList.contains('weekend-col');
+      const md = await loadMonth();
+      const cur = (md[sid] && md[sid][ds]) || '';
+
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = cur;
+      inp.dataset.row = row; inp.dataset.col = col;
+      inp.setAttribute('list', item.role==='nursing' ? 'nurseCodesList' : 'simpleCodesList');
+      inp.style.cssText = 'width:100%;height:100%;border:none;background:transparent;font-size:10.5px;font-weight:800;text-align:center;font-family:inherit;';
+      cellEl.innerHTML=''; cellEl.appendChild(inp); inp.focus(); inp.select();
+
+      function writeVal(val){
+        if(!md[sid]) md[sid] = {};
+        const prev = md[sid][ds] || '';
+        if(prev !== val){
+          undoStack.push({monthKey: monthKey(monthCursor), sid, ds, prevVal:prev});
+          if(undoStack.length>50) undoStack.shift();
+        }
+        if(val==='') delete md[sid][ds]; else md[sid][ds] = val;
+      }
+      let committed = false;
+      async function commit(){
+        if(committed) return; committed = true;
+        writeVal(inp.value.trim());
+        await saveMonth();
+        renderGrid(); renderMergedGrid();
+      }
+      function moveTo(targetRow, targetCol){
+        committed = true;
+        const val = inp.value.trim();
+        writeVal(val);
+        saveMonth();
+        cellEl.className = `shift-cell ${mergedCellCls(val, item.role)}${isWeekendCol?' weekend-col':''}`;
+        cellEl.style.cssText = mergedCellSty(val);
+        cellEl.textContent = displayCode(val);
+        const target = document.getElementById('mergedTable').querySelector(`.shift-cell[data-row="${targetRow}"][data-col="${targetCol}"]`);
+        if(target) target.click();
+      }
+      const arrowMap = {ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1]};
+      inp.addEventListener('keydown', (e)=>{
+        if(e.key==='Enter'){ inp.blur(); return; }
+        if(e.key==='Escape'){ committed = true; renderMergedGrid(); return; }
+        if(arrowMap[e.key]){
+          e.preventDefault();
+          const [dr,dc] = arrowMap[e.key];
+          moveTo(row+dr, col+dc);
+        }
+      });
+      inp.addEventListener('blur', commit);
+    };
+  });
+
+  if(!table.dataset.pasteBound){
+    table.dataset.pasteBound = '1';
+    table.addEventListener('paste', async (e)=>{
+      lastPasteEventTime = Date.now();
+      const target = e.target;
+      if(!target || target.tagName!=='INPUT' || !target.closest('.shift-cell')) return;
+      e.preventDefault();
+      const cd = (e.clipboardData || window.clipboardData);
+      const text = cd ? cd.getData('text/plain') : '';
+      if(!text) return;
+      const matrix = text.replace(/\r/g,'').split('\n').filter((l,i,arr)=> !(i===arr.length-1 && l==='')).map(r=>r.split('\t'));
+      if(matrix.length===1 && matrix[0].length===1){ target.value = matrix[0][0].trim(); return; }
+      // 修正:先讓輸入框的值等於貼上的第一格。否則貼完重繪、輸入框失焦時,舊值會回頭蓋掉第一格
+      target.value = matrix[0][0].trim();
+      const anchorRow = parseInt(target.dataset.row), anchorCol = parseInt(target.dataset.col);
+      const md = await loadMonth();
+      const nDaysLocal = daysInMonth(monthCursor);
+      let changed = 0, skipped = 0;
+      matrix.forEach((rowVals, i)=>{
+        const item = mergedItems[anchorRow + i];
+        if(!item) return;
+        if(!canEditRole(item.role)){ skipped++; return; }
+        rowVals.forEach((val, j)=>{
+          const c = anchorCol + j;
+          if(c<1 || c>nDaysLocal) return;
+          const ds = dateStr(monthCursor, c);
+          const v = val.trim();
+          const prev = (md[item.id] && md[item.id][ds]) || '';
+          if(prev !== v){
+            undoStack.push({monthKey: monthKey(monthCursor), sid:item.id, ds, prevVal:prev});
+            if(undoStack.length>50) undoStack.shift();
+          }
+          if(!md[item.id]) md[item.id] = {};
+          if(v==='') delete md[item.id][ds]; else md[item.id][ds] = v;
+          changed++;
+        });
+      });
+      await saveMonth();
+      renderGrid(); renderMergedGrid();
+      showToast(`已貼上 ${changed} 個儲存格(合併檢視)${skipped?`,${skipped} 列因權限不足已略過`:''}`);
+    });
+  }
+}
+
+document.getElementById('toggleMergedBtn').onclick = async ()=>{
+  mergedPanelOpen = !mergedPanelOpen;
+  document.getElementById('mergedPanel').style.display = mergedPanelOpen ? 'block' : 'none';
+  if(mergedPanelOpen){
+    await renderMergedGrid();
+    document.getElementById('mergedPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+};
+document.getElementById('mergedPickerBody').addEventListener('change', (e)=>{
+  const t = e.target;
+  if(t.classList.contains('merged-staff-cb')){
+    if(t.checked) mergedSelIds.add(t.dataset.id); else mergedSelIds.delete(t.dataset.id);
+  } else if(t.classList.contains('merged-dept-cb')){
+    staff[t.dataset.role].forEach(p=>{ if(t.checked) mergedSelIds.add(p.id); else mergedSelIds.delete(p.id); });
+  } else return;
+  saveMergedSelection();
+  clearSelRange();
+  renderMergedGrid();
+});
+document.getElementById('mergedSelectAll').onclick = ()=>{
+  mergedAvailableRoles().forEach(r=> staff[r.key].forEach(p=> mergedSelIds.add(p.id)));
+  saveMergedSelection(); clearSelRange(); renderMergedGrid();
+};
+document.getElementById('mergedSelectNone').onclick = ()=>{
+  mergedAvailableRoles().forEach(r=> staff[r.key].forEach(p=> mergedSelIds.delete(p.id)));
+  saveMergedSelection(); clearSelRange(); renderMergedGrid();
+};
+
 
 /* ---------- 對照版班表(草稿) ---------- */
 async function renderDraftGrid(){
@@ -2354,6 +2686,8 @@ async function renderDraftGrid(){
         target.value = matrix[0][0].trim();
         return;
       }
+      // 修正:先讓輸入框的值等於貼上的第一格。否則貼完重繪、輸入框失焦時,舊值會回頭蓋掉第一格
+      target.value = matrix[0][0].trim();
       const anchorRow = parseInt(target.dataset.row);
       const anchorCol = parseInt(target.dataset.col);
       const dd = await loadDraftMonth();
@@ -2482,6 +2816,7 @@ document.getElementById('slApplyBtn').onclick = async ()=>{
 
 function render(){
   renderTabs(); renderGrid(); renderCodeRefStrip();
+  if(mergedPanelOpen) renderMergedGrid();
   if(document.getElementById('leaveStaffSelect')) updateLeavePanel();
   if(draftPanelOpen) renderDraftGrid();
   document.getElementById('monthLabel').textContent = `${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月`;
@@ -2990,19 +3325,20 @@ document.getElementById('exportBtn').onclick = async ()=>{
     const d = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), day);
     header.push(`${monthCursor.getMonth()+1}/${day}(${WD[d.getDay()]})`);
   }
-  header.push('休假天數', '特休天數', '合計');
+  header.push('休假天數', '特休天數', '補休天數', '合計');
   const rows = [header];
   items.forEach(p=>{
     const row = [p.name, p.code||''];
-    let regularLeaveCount = 0, specialLeaveCount = 0;
+    let regularLeaveCount = 0, specialLeaveCount = 0, compLeaveCount = 0;
     for(let day=1; day<=nDays; day++){
       const ds = dateStr(monthCursor, day);
       const val = (monthData[p.id] && monthData[p.id][ds]) || '';
       if(isSpecialLeaveCode(val)) specialLeaveCount++;
+      else if(isCompLeaveCode(val)) compLeaveCount++;
       else if(isRegularLeaveCodeOnly(val)) regularLeaveCount++;
       row.push(displayCode(val));
     }
-    row.push(regularLeaveCount, specialLeaveCount, regularLeaveCount+specialLeaveCount);
+    row.push(regularLeaveCount, specialLeaveCount, compLeaveCount, regularLeaveCount+specialLeaveCount+compLeaveCount);
     rows.push(row);
   });
   const groups = currentRole==='nursing' ? [
@@ -3025,7 +3361,7 @@ document.getElementById('exportBtn').onclick = async ()=>{
   });
   try{
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:10},{wch:14}, ...Array(nDays).fill({wch:8}), {wch:9},{wch:9},{wch:9}];
+    ws['!cols'] = [{wch:10},{wch:14}, ...Array(nDays).fill({wch:8}), {wch:9},{wch:9},{wch:9},{wch:9}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, ROLES.find(r=>r.key===currentRole).label);
     const fname = `${ROLES.find(r=>r.key===currentRole).label}_${monthCursor.getFullYear()}年${monthCursor.getMonth()+1}月_排班表.xlsx`;
@@ -3176,7 +3512,14 @@ ${tableHTML}
 
 let dbCellClipboardValue = null;
 let lastPasteEventTime = 0;
-let selTarget = 'live'; // 'live' | 'draft' — 記錄目前選取範圍屬於哪一張表
+let selTarget = 'live'; // 'live' | 'draft' | 'merged' — 記錄目前選取範圍屬於哪一張表
+function getSelItems(editableOnly){
+  if(selTarget==='merged'){
+    // 合併檢視:沒有編輯權限的部門,在「刪除/貼上」時回傳 null,讓既有的 if(!p) 判斷自然略過
+    return editableOnly ? mergedItems.map(p=> canEditRole(p.role) ? p : null) : mergedItems;
+  }
+  return staff[currentRole];
+}
 function setSelRange(r1, c1, r2, c2, target){
   if(target) selTarget = target;
   selRange = {r1:Math.min(r1,r2), c1:Math.min(c1,c2), r2:Math.max(r1,r2), c2:Math.max(c1,c2)};
@@ -3191,7 +3534,7 @@ function clearSelRange(){
 function applySelHighlight(){
   document.querySelectorAll('.shift-cell.multi-selected').forEach(el=> el.classList.remove('multi-selected'));
   if(!selRange) return;
-  const table = document.getElementById(selTarget==='draft' ? 'draftTable' : 'scheduleTable');
+  const table = document.getElementById(selTarget==='draft' ? 'draftTable' : (selTarget==='merged' ? 'mergedTable' : 'scheduleTable'));
   if(!table) return;
   for(let r=selRange.r1; r<=selRange.r2; r++){
     for(let c=selRange.c1; c<=selRange.c2; c++){
@@ -3206,7 +3549,7 @@ document.addEventListener('mouseup', ()=>{
 });
 async function deleteSelectedRange(){
   if(!selRange) return;
-  const items = staff[currentRole];
+  const items = getSelItems(true);
   const isDraft = selTarget==='draft';
   const dataObj = isDraft ? await loadDraftMonth() : await loadMonth();
   let changed = 0;
@@ -3229,13 +3572,14 @@ async function deleteSelectedRange(){
   if(!isDraft && undoStack.length>50) undoStack = undoStack.slice(-50);
   if(changed===0){ showToast('選取範圍內沒有可清除的內容'); return; }
   if(isDraft){ await saveDraftMonth(); renderDraftGrid(); }
+  else if(selTarget==='merged'){ await saveMonth(); await renderGrid(); await renderMergedGrid(); }
   else{ await saveMonth(); renderGrid(); }
   applySelHighlight();
   showToast(`已清除 ${changed} 個儲存格${isDraft?'(對照草稿)':''}`);
 }
 async function fillSelectedRangeWithMatrix(matrix){
   if(!selRange) return;
-  const items = staff[currentRole];
+  const items = getSelItems(true);
   const isDraft = selTarget==='draft';
   const dataObj = isDraft ? await loadDraftMonth() : await loadMonth();
   const nDaysLocal = daysInMonth(monthCursor);
@@ -3275,6 +3619,7 @@ async function fillSelectedRangeWithMatrix(matrix){
     });
   }
   if(isDraft){ await saveDraftMonth(); renderDraftGrid(); }
+  else if(selTarget==='merged'){ await saveMonth(); await renderGrid(); await renderMergedGrid(); }
   else{ await saveMonth(); renderGrid(); }
   applySelHighlight();
   showToast(`已貼上,共更新 ${changed} 個儲存格${isDraft?'(對照草稿)':''}`);
@@ -3295,8 +3640,11 @@ document.addEventListener('keydown', (e)=>{
     const inAnyInput0 = active0 && (active0.tagName==='INPUT' || active0.tagName==='SELECT');
     if(inAnyInput0) return; // 正在編輯儲存格/後台欄位時不攔截方向鍵
     if(!canEditRole(currentRole)) return;
-    const items = staff[currentRole] || [];
-    const maxRow = items.length - 1;
+    // 依目前選取所屬的表(正式/草稿/合併)決定列數上限,合併表的列是跨部門的,不能用 staff[currentRole]
+    const activeTableId = selTarget==='draft' ? 'draftTable' : (selTarget==='merged' ? 'mergedTable' : 'scheduleTable');
+    const activeTable = document.getElementById(activeTableId);
+    const rowCount = activeTable ? new Set([...activeTable.querySelectorAll('.shift-cell[data-row]')].map(c=>c.dataset.row)).size : 0;
+    const maxRow = rowCount - 1;
     const maxCol = daysInMonth(monthCursor);
     if(maxRow < 0) return;
     // 還沒有任何選取時,從左上角(第一位同仁、1號)開始
@@ -3311,7 +3659,7 @@ document.addEventListener('keydown', (e)=>{
     else if(e.key==='ArrowRight') col = Math.min(maxCol, col+1);
     selCursor = {row, col};
     setSelRange(selAnchor.row, selAnchor.col, row, col, selTarget);
-    const tableId = selTarget==='draft' ? 'draftTable' : 'scheduleTable';
+    const tableId = selTarget==='draft' ? 'draftTable' : (selTarget==='merged' ? 'mergedTable' : 'scheduleTable');
     const el = document.querySelector(`#${tableId} .shift-cell[data-row="${row}"][data-col="${col}"]`);
     if(el && el.scrollIntoView) el.scrollIntoView({block:'nearest', inline:'nearest'});
     e.preventDefault();
@@ -3335,7 +3683,7 @@ document.addEventListener('keydown', (e)=>{
 
   if(!inShiftCell && !inDbTable && selRange){
     if(key==='c'){
-      const items = staff[currentRole];
+      const items = getSelItems(false);
       const rows = [];
       for(let r=selRange.r1; r<=selRange.r2; r++){
         const p = items[r]; if(!p) continue;
