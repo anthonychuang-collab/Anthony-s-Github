@@ -117,7 +117,7 @@ def test_white_code_by_block_and_allowed():
     eq("台籍勾D6x→D6x", convert_person(Person(name="台6", block="台籍照服", allowed={"D6x","Ex","Nx"}), days_from(["D"]), cb, cfg)["days"][1]["code"], "D6x")
 
 def test_person_head_name():
-    eq("人頭核章=牌照持有人", Person(name="陳詡善", block="護理", stamp_name="陳淑萍").record_name, "陳淑萍")
+    eq("人頭核章=牌照持有人", Person(name="借牌員", block="護理", stamp_name="持牌員").record_name, "持牌員")
     eq("本人核章=自己", Person(name="甲", block="護理").record_name, "甲")
 
 def test_coverage_flags_shortfall():
@@ -276,7 +276,7 @@ def test_readfban_roundtrip():
         _mk_full("顏欣盈", "護理", "顏欣盈",
                  {**{d: "D4x" for d in range(1, 32)}, **{("fl", d): "2F" for d in range(1, 32)}}, cfg),
         _mk_full("何承祐", "護理", "何承祐", {d: "Nx" for d in range(1, 32)}, cfg),
-        _mk_full("陳詡善", "護理", "陳淑萍",  # 人頭：核章≠姓名
+        _mk_full("借牌員", "護理", "持牌員",  # 人頭：核章≠姓名（虛構例，非實際同仁）
                  {**{d: "D4x" for d in range(1, 32)}, **{("fl", d): "3F" for d in range(1, 32)}}, cfg),
     ]
     tmp = _os.path.join(tempfile.gettempdir(), "test_rt_F.xlsx")
@@ -288,9 +288,9 @@ def test_readfban_roundtrip():
     eq("顏欣盈 第1日=D白", byname["顏欣盈"]["days"][1]["cat"], "D白")
     eq("顏欣盈 第1日樓層=2F(由底色)", byname["顏欣盈"]["days"][1]["floor"], "2F")
     eq("何承祐 第1日=N大夜", byname["何承祐"]["days"][1]["cat"], "N大夜")
-    eq("陳詡善文件用名=陳淑萍(牌照持有人)", byname["陳詡善"]["record_name"], "陳淑萍")
-    eq("陳詡善名冊欄=陳詡善(實際同仁)", byname["陳詡善"]["name"], "陳詡善")
-    eq("陳詡善核章欄另存=陳淑萍", byname["陳詡善"]["stamp"], "陳淑萍")
+    eq("人頭文件用名=持牌員(牌照持有人)", byname["借牌員"]["record_name"], "持牌員")
+    eq("人頭名冊欄=借牌員(實際同仁)", byname["借牌員"]["name"], "借牌員")
+    eq("人頭核章欄另存=持牌員", byname["借牌員"]["stamp"], "持牌員")
 
 def test_readfban_feeds_docgen():
     """US-7→US-8：讀回的資料能正確產生約束表指派。"""
@@ -380,18 +380,18 @@ def test_head_name_same_on_both_paths():
     cfg = make_cfg(週起始星期=6)
     cb = CodeBook(CODE_MAP)
     # 路徑一：後台主檔有核章人員(牌照持有人)
-    p1 = convert_person(Person(name="陳詡善", block="護理", stamp_name="陳淑萍"),
+    p1 = convert_person(Person(name="借牌員", block="護理", stamp_name="持牌員"),
                         days_from(["Di"] * 31), cb, cfg)
-    eq("路徑一 文件用名=陳淑萍", p1["record_name"], "陳淑萍")
+    eq("路徑一 文件用名=持牌員", p1["record_name"], "持牌員")
     # 路徑二：把同一個人寫進 F 班再讀回
-    conv = [_mk_full("陳詡善", "護理", "陳淑萍",
+    conv = [_mk_full("借牌員", "護理", "持牌員",
                      {**{d: "D4x" for d in range(1, 32)},
                       **{("fl", d): "2F" for d in range(1, 32)}}, cfg)]
     tmp = _os.path.join(tempfile.gettempdir(), "test_head_paths.xlsx")
     writer.write(conv, 31, cfg, tmp, "115.08")
     conv2, _ = read_fban.load(tmp, cfg)
-    p2 = next(x for x in conv2 if x["name"] == "陳詡善")
-    eq("路徑二 文件用名=陳淑萍", p2["record_name"], "陳淑萍")
+    p2 = next(x for x in conv2 if x["name"] == "借牌員")
+    eq("路徑二 文件用名=持牌員", p2["record_name"], "持牌員")
     eq("兩條路徑文件用名一致", p1["record_name"], p2["record_name"])
 
 
@@ -438,6 +438,29 @@ def test_aide_split_by_master_list():
     check("洪瑞輝→台籍照服", tw is not None and tw.block == "台籍照服", str(tw and tw.block))
     check("阮氏秋賢→外籍照服", fn is not None and fn.block == "外籍照服", str(fn and fn.block))
     check("未列主檔者查無(產生時歸台籍並標記)", cfg.person_by_name("查無此人甲乙") is None, "")
+
+
+def test_renamed_person_prints_new_name():
+    """迴歸：改名者（陳淑萍→陳詡善）在主檔不得留核章人員，文件一律印新名。
+    若核章人員欄被填回舊名，文件會印回已不使用的舊名，這裡會抓到。"""
+    from fban import config as cfgmod
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    cfgpath = _os.path.join(root, "後台設定.xlsx")
+    if not _os.path.exists(cfgpath):
+        print("  ⏭ 略過(無後台設定.xlsx)"); return
+    cfg = cfgmod.load(cfgpath)
+    p = cfg.person_by_name("陳詡善")
+    check("陳詡善在人員主檔中", p is not None, "")
+    if p is None:
+        return
+    eq("陳詡善文件用名=陳詡善(新名)", p.record_name, "陳詡善")
+    check("陳詡善未掛核章人員(改名非借牌)", not p.stamp_name, f"stamp_name={p.stamp_name!r}")
+    # 主檔任何欄位都不該再出現舊名
+    import openpyxl
+    ws = openpyxl.load_workbook(cfgpath)["人員主檔"]
+    hits = [c.coordinate for r in ws.iter_rows() for c in r
+            if isinstance(c.value, str) and "陳淑萍" in c.value and c.column != ws.max_column]
+    check("人員主檔的姓名/核章欄不再有舊名陳淑萍", not hits, str(hits))
 
 
 def run():
