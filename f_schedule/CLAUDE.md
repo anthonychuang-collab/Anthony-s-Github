@@ -23,7 +23,7 @@ python generate_fban.py --config 後台設定.xlsx --t 護理T.pdf:護理 --out 
 fban/                 核心套件（純邏輯，無 web 相依）
 ├─ config.py          讀 後台設定.xlsx → Config/Person/HeadStaff
 ├─ codes.py           班別碼解析 CodeBook（Di→D4x、外籍 D3a→Dx…）
-├─ tsheet.py          讀 T 班 xlsx（自動偵測日期列/分頁）
+├─ tsheet.py          讀 T 班 xlsx（自動偵測日期列/分頁；日期列支援純數字與 10/1(四) 兩種）
 ├─ tsheet_pdf.py      讀 T 班 PDF（列印版備援）
 ├─ convert.py         T→F 轉換：碼、例/休/國配額、樓層上色、人頭改名
 ├─ coverage.py        設立標準＋勞基法檢核
@@ -51,6 +51,7 @@ tests/test_fban.py    自製零依賴測試（60項）
 ## 慣例／注意
 
 - **規則不寫死在程式**：顏色、班別碼、人頭池、行事曆配額全部在 `後台設定.xlsx`，改 Excel 即可。
+- 上傳分三處(`app.BLOCKS`)：護理／台籍照服／外籍照服 T 班。主檔裡的人區塊以人員主檔「區塊」為準(`cfg.person_by_name`)，主檔沒有的人才歸上傳位置。T 班日期列支援純數字與 `10/1(四)` 兩種。
 - 樓層色：2F綠FF70AD47 / 3F藍FF5B9BD5 / 5F紅FFFF2F92；護理小夜橘、大夜灰。
 - 例/休/國依〈年度行事曆〉每月配額；例假數嚴守配額，例假硬底線=每14天≥2。
 - 文件產生**不需 LibreOffice/字型**（標楷體於 Mac 開檔時算繪）。

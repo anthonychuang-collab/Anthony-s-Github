@@ -395,6 +395,51 @@ def test_head_name_same_on_both_paths():
     eq("兩條路徑文件用名一致", p1["record_name"], p2["record_name"])
 
 
+def test_tsheet_date_formats():
+    """T 班日期列同時支援純數字與 10/1(四) 這種寫法。"""
+    from fban import tsheet
+    # 純數字
+    eq("整數 1", tsheet._day_num(1), 1)
+    eq("字串 '15'", tsheet._day_num("15"), 15)
+    eq("超出範圍 2398→None", tsheet._day_num(2398), None)
+    # 新版 月/日(星期)
+    eq("'10/1(四)'→1", tsheet._day_num("10/1(四)"), 1)
+    eq("'10/31(六)'→31", tsheet._day_num("10/31(六)"), 31)
+    eq("'9/2'→2", tsheet._day_num("9/2"), 2)
+    eq("代碼 '2Di'→None", tsheet._day_num("2Di"), None)
+    eq("'/'空班→None", tsheet._day_num("/"), None)
+    # 用新版版面(第1列標題含 10/1(四)…)實際讀一份
+    import openpyxl
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.cell(1, 1, "姓名"); ws.cell(1, 2, "人員班別代碼")
+    for d in range(1, 31):
+        ws.cell(1, 2 + d, f"10/{d}(一)")
+    ws.cell(2, 1, "顏欣盈"); ws.cell(2, 2, 15)
+    for d in range(1, 31):
+        ws.cell(2, 2 + d, "2Di" if d % 2 else "R")
+    tmp = _os.path.join(tempfile.gettempdir(), "t_newfmt.xlsx"); wb.save(tmp)
+    got = tsheet.read(tmp)
+    eq("新版讀到30天", got["n_days"], 30)
+    eq("新版日期列在第1列", got["day_row"], 1)
+    eq("新版第1欄=姓名", got["rows"][0]["name"], "顏欣盈")
+    eq("新版第1天碼=2Di", got["rows"][0]["days"][1], "2Di")
+
+
+def test_aide_split_by_master_list():
+    """照服合併檔：由『人員主檔』名單自動分台籍/外籍。"""
+    from fban import config as cfgmod
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    cfgpath = _os.path.join(root, "後台設定.xlsx")
+    if not _os.path.exists(cfgpath):
+        print("  ⏭ 略過(無後台設定.xlsx)"); return
+    cfg = cfgmod.load(cfgpath)
+    tw = cfg.person_by_name("洪瑞輝")
+    fn = cfg.person_by_name("阮氏秋賢")
+    check("洪瑞輝→台籍照服", tw is not None and tw.block == "台籍照服", str(tw and tw.block))
+    check("阮氏秋賢→外籍照服", fn is not None and fn.block == "外籍照服", str(fn and fn.block))
+    check("未列主檔者查無(產生時歸台籍並標記)", cfg.person_by_name("查無此人甲乙") is None, "")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

@@ -1,22 +1,43 @@
 # -*- coding: utf-8 -*-
-"""讀取 T 班（xlsx 月分頁），自動偵測日期列與資料列。"""
+"""讀取 T 班（xlsx 月分頁），自動偵測日期列與資料列。
+日期列同時支援兩種寫法：純數字 1,2,3…；或 10/1(四)、10/1 這類「月/日(星期)」。"""
+import re
 import openpyxl
 from openpyxl.utils import get_column_letter
+
+_MD_RE = re.compile(r"^\s*\d{1,2}\s*/\s*(\d{1,2})")   # 10/1(四) → 取「日」=1
+
+
+def _day_num(v):
+    """把一格轉成日期號(1..31)；不是日期就回 None。
+    支援：整數 1..31、字串 '1'…'31'、'10/1(四)'、'10/1'。"""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v if 1 <= v <= 31 else None
+    s = str(v).strip()
+    m = _MD_RE.match(s)
+    if m:
+        d = int(m.group(1))
+        return d if 1 <= d <= 31 else None
+    if s.isdigit():
+        d = int(s)
+        return d if 1 <= d <= 31 else None
+    return None
 
 
 def _find_day_header(ws, max_scan=15):
     for r in range(1, max_scan + 1):
         for c in range(1, ws.max_column + 1):
-            v = ws.cell(r, c).value
-            if v == 1:
+            if _day_num(ws.cell(r, c).value) == 1:
                 n = 1
                 cc = c + 1
-                while cc <= ws.max_column and ws.cell(r, cc).value == n + 1:
+                while cc <= ws.max_column and _day_num(ws.cell(r, cc).value) == n + 1:
                     n += 1
                     cc += 1
                 if n >= 20:
                     return r, c, n
-    raise ValueError("找不到日期標題列（應有連續 1..N）")
+    raise ValueError("找不到日期標題列（應有連續 1..N，或 10/1(四) 這類日期）")
 
 
 def _autopick_sheet(wb):
