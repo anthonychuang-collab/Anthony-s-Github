@@ -441,8 +441,10 @@ def test_aide_split_by_master_list():
 
 
 def test_renamed_person_prints_new_name():
-    """迴歸：改名者（陳淑萍→陳詡善）在主檔不得留核章人員，文件一律印新名。
-    若核章人員欄被填回舊名，文件會印回已不使用的舊名，這裡會抓到。"""
+    """迴歸：兩筆曾被誤記為「借牌照」的同仁，主檔不得留核章人員，文件一律印本人姓名。
+      - 陳詡善：原名陳淑萍，是改名，不是借牌
+      - 洪瑞輝：核章人員欄原誤填王淑環，是填錯，本人即核章
+    若核章人員欄被填回去，文件會印成別人的名字，這裡會抓到。"""
     from fban import config as cfgmod
     root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     cfgpath = _os.path.join(root, "後台設定.xlsx")
@@ -461,6 +463,15 @@ def test_renamed_person_prints_new_name():
     hits = [c.coordinate for r in ws.iter_rows() for c in r
             if isinstance(c.value, str) and "陳淑萍" in c.value and c.column != ws.max_column]
     check("人員主檔的姓名/核章欄不再有舊名陳淑萍", not hits, str(hits))
+    # 洪瑞輝：核章人員欄原誤填王淑環
+    h = cfg.person_by_name("洪瑞輝")
+    check("洪瑞輝在人員主檔中", h is not None, "")
+    if h is not None:
+        eq("洪瑞輝文件用名=洪瑞輝(本人)", h.record_name, "洪瑞輝")
+        check("洪瑞輝未掛核章人員(原誤填)", not h.stamp_name, f"stamp_name={h.stamp_name!r}")
+    hits2 = [c.coordinate for r in ws.iter_rows() for c in r
+             if isinstance(c.value, str) and "王淑環" in c.value and c.column != ws.max_column]
+    check("人員主檔的姓名/核章欄不再有王淑環", not hits2, str(hits2))
 
 
 def run():
