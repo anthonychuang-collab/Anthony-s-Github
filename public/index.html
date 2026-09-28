@@ -292,8 +292,12 @@
         <button id="applyLeaveBtn" style="border:none;border-radius:8px;background:var(--primary);color:#fff;padding:6px 14px;font-weight:700;cursor:pointer;">套用</button>
       </div>
       <div class="threshold-row" id="specialLeavePanel">
-        <span>本月特休天數需求:</span>
+        <span>本月休假天數需求:</span>
         <select id="slStaffSelect"></select>
+        <select id="slType">
+          <option value="special">特休</option>
+          <option value="comp">補休</option>
+        </select>
         <span>希望排休</span>
         <input type="number" id="slDays" min="0" style="width:56px;text-align:center;">
         <span>天(日期由公司安排)</span>
@@ -361,7 +365,7 @@
     </div>
 
     <div class="brand-footer"></div>
-    <div class="footer-note">線東大眾護理之家 · 內部管理系統 · v0.9</div>
+    <div class="footer-note">線東大眾護理之家 · 內部管理系統 · v0.9.1</div>
   </div>
 
   <div id="adminView">
@@ -571,7 +575,7 @@ const RULE_DEFS = [
   {key:'consecutive_days', name:'連續上班不超過設定天數', type:'soft', param:'5', target:'fulltime', suggestion:'在連續上班的中段安插一天休假'},
   {key:'monthly_rest_days', name:'每月至少要有設定天數的休假', type:'soft', param:'10', target:'fulltime', suggestion:'從尚未排定的空格中,選幾天改排為休假'},
   {key:'weekend_pref', name:'週末特殊需求(w1-w5)未被滿足', type:'soft', param:'', target:'all', suggestion:'依該同仁的週末需求類型,調整週六日的排班'},
-  {key:'leave_request_fulfillment', name:'本月特休天數需求尚未排滿', type:'soft', param:'', target:'all', suggestion:'從尚未排定的空格中,挑選日期排入該同仁的特休(R1)'},
+  {key:'leave_request_fulfillment', name:'本月特休/補休天數需求尚未排滿', type:'soft', param:'', target:'all', suggestion:'從尚未排定的空格中,挑選日期排入該同仁登記需求對應類別的特休或補休代碼'},
 ];
 const BUILTIN_CODES = [
   {code:'Di', label:'行政班 08:00-16:00,不卡現場,護理長/主任常態'},
@@ -615,10 +619,24 @@ function isCompLeaveCode(v){
   return customLeaveCategory(v)==='comp';
 }
 function isRegularLeaveCodeOnly(v){
-  return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='regular';
+  // 注意:'R' 本身不是內建代碼(只有 R1/R2 是),不可在此硬編碼判斷,
+  // 否則會蓋掉使用者自訂代碼(例如自訂了一個代碼字面上就是「R」)的「計入休假統計」設定,
+  // 導致自訂的補休/特休代碼被誤算成一般休假天數。一律以 customLeaveCategory 為準。
+  if(v==='休' || v==='R1' || v==='R2') return true;
+  const cat = customLeaveCategory(v);
+  if(cat) return cat==='regular';
+  return false;
 }
-function isWorkCode(v){ return !!v && v!=='休' && v!=='R1' && v!=='R2' && v!=='R' && v!=='/' && customLeaveCategory(v)===''; }
-function isRestCode(v){ return v==='休' || v==='R1' || v==='R2' || v==='R' || customLeaveCategory(v)==='special' || customLeaveCategory(v)==='comp' || customLeaveCategory(v)==='regular'; }
+function isWorkCode(v){
+  if(!v) return false;
+  if(v==='休' || v==='R1' || v==='R2' || v==='/') return false;
+  return customLeaveCategory(v)==='';
+}
+function isRestCode(v){
+  if(v==='休' || v==='R1' || v==='R2') return true;
+  const cat = customLeaveCategory(v);
+  return cat==='special' || cat==='comp' || cat==='regular';
+}
 function uid(){ return 's'+Math.random().toString(36).slice(2,9); }
 
 function showToast(msg){
@@ -734,7 +752,31 @@ async function loadLeaveReq(){
 async function saveLeaveReq(){
   const key = monthKey(monthCursor);
   const ok = await storageSetRetry('leave-request:'+key, JSON.stringify(leaveReqCache[key]||{}));
-  if(!ok) showToast('⚠ 儲存特休需求失敗,請稍後再試一次');
+  if(!ok) showToast('⚠ 儲存休假天數需求失敗,請稍後再試一次');
+}
+// leaveReq[staffId] 可能是舊格式的純數字(視為「特休」,向下相容舊資料),
+// 或新格式的物件 {special:天數, comp:天數}。以下輔助函式統一存取介面。
+const LEAVE_REQ_TYPE_LABEL = {special:'特休', comp:'補休'};
+function leaveReqAmount(entry, type){
+  if(entry===undefined || entry===null) return undefined;
+  if(typeof entry === 'number') return type==='special' ? entry : undefined;
+  return entry[type];
+}
+function setLeaveReqAmount(req, staffId, type, days){
+  let entry = req[staffId];
+  if(typeof entry === 'number') entry = {special: entry};
+  if(!entry || typeof entry !== 'object') entry = {};
+  entry[type] = days;
+  req[staffId] = entry;
+}
+function clearLeaveReqAmount(req, staffId, type){
+  let entry = req[staffId];
+  if(typeof entry === 'number') entry = {special: entry};
+  if(!entry || typeof entry !== 'object') { delete req[staffId]; return; }
+  delete entry[type];
+  const remaining = Object.keys(entry).filter(k=> entry[k]!==undefined && entry[k]!==null);
+  if(remaining.length===0) delete req[staffId];
+  else req[staffId] = entry;
 }
 
 /* ---------- Permissions ---------- */
@@ -2784,17 +2826,25 @@ async function renderLeaveReqList(){
   const list = document.getElementById('slList');
   const items = staff[currentRole];
   const req = await loadLeaveReq();
-  const entries = items.map(p=> ({p, days:req[p.id]})).filter(x=> x.days!==undefined && x.days!==null);
-  if(entries.length===0){ list.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">本月尚無登記</span>'; return; }
-  list.innerHTML = entries.map(({p,days})=>`
+  const chips = [];
+  items.forEach(p=>{
+    const entry = req[p.id];
+    if(entry===undefined || entry===null) return;
+    ['special','comp'].forEach(type=>{
+      const days = leaveReqAmount(entry, type);
+      if(days!==undefined && days!==null) chips.push({p, type, days});
+    });
+  });
+  if(chips.length===0){ list.innerHTML = '<span style="font-size:11.5px;color:var(--muted);">本月尚無登記</span>'; return; }
+  list.innerHTML = chips.map(({p,type,days})=>`
     <span class="tag" style="background:var(--brown-soft);color:var(--brown);border-color:var(--brown);">
-      ${p.name}:${days}天 <button data-id="${p.id}" style="border:none;background:none;color:var(--danger);cursor:pointer;font-weight:900;margin-left:3px;">×</button>
+      ${p.name}:${LEAVE_REQ_TYPE_LABEL[type]}${days}天 <button data-id="${p.id}" data-type="${type}" style="border:none;background:none;color:var(--danger);cursor:pointer;font-weight:900;margin-left:3px;">×</button>
     </span>
   `).join('');
   list.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.onclick = async ()=>{
       const req = await loadLeaveReq();
-      delete req[btn.dataset.id];
+      clearLeaveReqAmount(req, btn.dataset.id, btn.dataset.type);
       await saveLeaveReq();
       renderLeaveReqList();
     };
@@ -2804,14 +2854,15 @@ document.getElementById('slApplyBtn').onclick = async ()=>{
   if(!canEditRole(currentRole)){ showToast('您的帳號對這個職務只有檢視權限'); return; }
   const sid = document.getElementById('slStaffSelect').value;
   if(!sid){ showToast('請先到後台管理新增人員'); return; }
+  const type = document.getElementById('slType').value;
   const days = parseInt(document.getElementById('slDays').value);
   if(isNaN(days) || days<0){ showToast('請輸入有效的天數'); return; }
   const req = await loadLeaveReq();
-  req[sid] = days;
+  setLeaveReqAmount(req, sid, type, days);
   await saveLeaveReq();
   document.getElementById('slDays').value = '';
   renderLeaveReqList();
-  showToast('已登記本月特休天數需求');
+  showToast(`已登記本月${LEAVE_REQ_TYPE_LABEL[type]}天數需求`);
 };
 
 function render(){
@@ -3267,8 +3318,17 @@ async function runHealthCheck(){
     }
 
     if(leaveReq[p.id]!==undefined){
-      const requested = leaveReq[p.id];
-      if(restTotal < requested) addResult('leave_request_fulfillment', `登記的特休需求 ${requested} 天,目前只排了 ${restTotal} 天休假`, p.name, `本月`, p);
+      const reqEntry = leaveReq[p.id];
+      const specialCountForReq = codes.filter(v=>isSpecialLeaveCode(v)).length;
+      const compCountForReq = codes.filter(v=>isCompLeaveCode(v)).length;
+      const reqSpecial = leaveReqAmount(reqEntry, 'special');
+      const reqComp = leaveReqAmount(reqEntry, 'comp');
+      if(reqSpecial!==undefined && reqSpecial!==null && specialCountForReq < reqSpecial){
+        addResult('leave_request_fulfillment', `登記的特休需求 ${reqSpecial} 天,目前只排了 ${specialCountForReq} 天特休`, p.name, `本月`, p);
+      }
+      if(reqComp!==undefined && reqComp!==null && compCountForReq < reqComp){
+        addResult('leave_request_fulfillment', `登記的補休需求 ${reqComp} 天,目前只排了 ${compCountForReq} 天補休`, p.name, `本月`, p);
+      }
     }
   });
 
