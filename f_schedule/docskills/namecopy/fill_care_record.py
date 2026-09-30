@@ -89,6 +89,44 @@ def detect_days_in_month(doc):
     return None
 
 
+_YM_RE = re.compile(r"(\d{2,3})(\s*)年(\s*)(\d{1,2})(\s*)月")
+
+
+def _replace_span(paragraph, start, end, new_text):
+    """把段落文字的 [start, end) 換成 new_text；跨越多個 run 也正確。"""
+    pos = 0
+    pending = new_text
+    for run in paragraph.runs:
+        r0, r1 = pos, pos + len(run.text)
+        pos = r1
+        if r1 <= start or r0 >= end:
+            continue
+        head = run.text[:start - r0] if start > r0 else ""
+        tail = run.text[end - r0:] if end < r1 else ""
+        run.text = head + pending + tail
+        pending = ""
+
+
+def set_title_year_month(doc, roc_year, month):
+    """把標題的「<民國年> 年 <月> 月」改成指定年月。回傳改到幾處。
+    月份位數變多時吃掉前面的空白，讓標題寬度不變、不擠壓後面的欄位。"""
+    hits = 0
+    for p in doc.paragraphs:
+        m = _YM_RE.search(p.text)
+        if not m:
+            continue
+        sp_y, sp_m, sp_after = m.group(2), m.group(3), m.group(5)
+        diff = len(str(month)) - len(m.group(4))
+        if diff > 0:
+            sp_m = sp_m[diff:] if len(sp_m) >= diff else ""
+        elif diff < 0:
+            sp_m = sp_m + " " * (-diff)
+        _replace_span(p, m.start(), m.end(),
+                      f"{roc_year}{sp_y}年{sp_m}{month}{sp_after}月")
+        hits += 1
+    return hits
+
+
 def clear_cell(cell):
     p = cell.paragraphs[0]
     for run in list(p.runs):
@@ -188,7 +226,10 @@ def set_cell_name(cell, name):
         extra_p._element.getparent().remove(extra_p._element)
 
 
-def fill(template_path, assignments_path, floor, output_path):
+def fill(template_path, assignments_path, floor, output_path,
+         roc_year=None, month=None):
+    """roc_year/month 有給時，以它為準改寫標題並決定當月天數；
+    未給時沿用範本標題自行偵測（CLI 直接套舊範本時的行為）。"""
     with open(assignments_path, "r", encoding="utf-8") as f:
         assignments = json.load(f)
     if floor not in assignments:
@@ -202,11 +243,21 @@ def fill(template_path, assignments_path, floor, output_path):
     set_document_font(d, "KaiTi")
     normalize_title_spacing(d)
 
-    days_in_month = detect_days_in_month(d)
-    if days_in_month is None:
-        print("WARNING: could not detect '<年>年 <月>月'", file=sys.stderr)
+    if roc_year is not None and month is not None:
+        # 以呼叫端指定的年月為準：範本是哪個月都沒關係
+        hits = set_title_year_month(d, roc_year, month)
+        days_in_month = calendar.monthrange(roc_year + 1911, month)[1]
+        print(f"Set title to {roc_year}/{month} ({hits} place(s)); "
+              f"{days_in_month} day(s) in this month.")
+        if hits == 0:
+            print("WARNING: 範本中找不到「<年>年 <月>月」標題，年月未改寫",
+                  file=sys.stderr)
     else:
-        print(f"Detected {days_in_month} day(s) in this month.")
+        days_in_month = detect_days_in_month(d)
+        if days_in_month is None:
+            print("WARNING: could not detect '<年>年 <月>月'", file=sys.stderr)
+        else:
+            print(f"Detected {days_in_month} day(s) in this month.")
 
     filled_days = set()
     for table in d.tables:

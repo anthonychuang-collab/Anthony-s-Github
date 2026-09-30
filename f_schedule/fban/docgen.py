@@ -122,6 +122,6 @@ def build_namecopy(converted, n_days, roc_year, month, templates, outdir):
         if not tpl or not os.path.exists(tpl):
             continue
         out = os.path.join(outdir, f"{roc_year}{month:02d}住民日常生活照護表-{fl}.docx")
-        fill_care_record.fill(tpl, aj, fl, out)
+        fill_care_record.fill(tpl, aj, fl, out, roc_year=roc_year, month=month)
         paths.append(out)
     return paths

@@ -474,6 +474,110 @@ def test_renamed_person_prints_new_name():
     check("人員主檔的姓名/核章欄不再有王淑環", not hits2, str(hits2))
 
 
+def test_namecopy_month_comes_from_request_not_template():
+    """迴歸：照護表的年月與天數要以『使用者選的月份』為準，不是範本標題。
+    範本停在 9 月時，產 10 月必須改寫標題為 10 月，且第 31 欄要保留並填入。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    import sys as _sys, importlib, json, calendar
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    fcr = importlib.import_module("fill_care_record")
+
+    # 造一個標題寫「115 年 9 月」、但日期欄有 1..31 的範本
+    d = Document()
+    d.add_paragraph("115年   9 月      姓名:")
+    t = d.add_table(rows=2, cols=1 + 31)
+    t.rows[0].cells[0].text = "日期"
+    for day in range(1, 32):
+        t.rows[0].cells[day].text = str(day)
+    t.rows[1].cells[0].text = "責任護士 簽名"
+    tpl = _os.path.join(tempfile.gettempdir(), "tpl_month.docx"); d.save(tpl)
+    aj = _os.path.join(tempfile.gettempdir(), "asg_month.json")
+    with open(aj, "w", encoding="utf-8") as f:
+        json.dump({"2F": {str(x): {"白班護理": f"護{x}"} for x in range(1, 32)}},
+                  f, ensure_ascii=False)
+
+    # 指定 10 月（31 天）
+    out = _os.path.join(tempfile.gettempdir(), "care_10.docx")
+    fcr.fill(tpl, aj, "2F", out, roc_year=115, month=10)
+    d2 = Document(out)
+    title = next(p.text for p in d2.paragraphs if "年" in p.text and "月" in p.text)
+    check("標題改為 10 月", "10 月" in title or "10月" in title, title)
+    check("標題不再是 9 月", "9 月" not in title.replace("19 月", ""), title)
+    row = d2.tables[0].rows[1]
+    eq("第31欄有填(10月有31天)", row.cells[31].text.strip(), "護31")
+    eq("第31欄日期標題保留", d2.tables[0].rows[0].cells[31].text.strip(), "31")
+
+    # 同一份範本指定 9 月（30 天）→ 第 31 欄留白
+    out9 = _os.path.join(tempfile.gettempdir(), "care_09.docx")
+    fcr.fill(tpl, aj, "2F", out9, roc_year=115, month=9)
+    d3 = Document(out9)
+    eq("9月：第30欄有填", d3.tables[0].rows[1].cells[30].text.strip(), "護30")
+    eq("9月：第31欄留白", d3.tables[0].rows[1].cells[31].text.strip(), "")
+
+
+def test_set_title_year_month_keeps_width():
+    """標題改月份時維持寬度：位數變多就吃掉前面的空白，不擠壓後面欄位。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    import sys as _sys, importlib
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    fcr = importlib.import_module("fill_care_record")
+    d = Document(); d.add_paragraph("115年   9 月      姓名:")
+    before = d.paragraphs[0].text
+    eq("改到 1 處", fcr.set_title_year_month(d, 115, 10), 1)
+    after = d.paragraphs[0].text
+    eq("9→10 後總長度不變", len(after), len(before))
+    check("內容為 10 月", "10 月" in after, after)
+    eq("10→9 再改回來", fcr.set_title_year_month(d, 115, 9), 1)
+    eq("改回後與原標題相同", d.paragraphs[0].text, before)
+
+
+def test_build_namecopy_passes_month_through():
+    """迴歸：docgen.build_namecopy 必須把年月傳給 fill()。
+    這正是 115.10 產出卻印成 9 月、只有 30 天的成因——
+    build_namecopy 有 roc_year/month 卻沒往下傳，月份只好由範本標題決定。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    from fban import docgen
+    # 範本標題停在 9 月，但日期欄有 1..31
+    d = Document()
+    d.add_paragraph("115年   9 月      姓名:")
+    t = d.add_table(rows=2, cols=1 + 31)
+    t.rows[0].cells[0].text = "日期"
+    for day in range(1, 32):
+        t.rows[0].cells[day].text = str(day)
+    t.rows[1].cells[0].text = "責任護士 簽名"
+    tpl = _os.path.join(tempfile.gettempdir(), "tpl_bn.docx"); d.save(tpl)
+
+    cfg = make_cfg(週起始星期=6)
+    conv = [_mk_full("護甲", "護理", "護甲",
+                     {**{x: "D4x" for x in range(1, 32)},
+                      **{("fl", x): "2F" for x in range(1, 32)}}, cfg)]
+    outdir = _os.path.join(tempfile.gettempdir(), "bn_out")
+    paths = docgen.build_namecopy(conv, 31, 115, 10, {"2F": tpl}, outdir)
+    check("有產出檔案", bool(paths), str(paths))
+    if not paths:
+        return
+    d2 = Document(paths[0])
+    title = next(p.text for p in d2.paragraphs if "年" in p.text and "月" in p.text)
+    check("標題依指定月份改為 10 月(非範本的9月)", "10 月" in title or "10月" in title, title)
+    eq("第31欄日期標題保留(10月有31天)",
+       d2.tables[0].rows[0].cells[31].text.strip(), "31")
+    eq("第31欄填入護甲", d2.tables[0].rows[1].cells[31].text.strip(), "護甲")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
