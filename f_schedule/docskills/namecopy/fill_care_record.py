@@ -135,13 +135,24 @@ def clear_cell(cell):
         extra_p._element.getparent().remove(extra_p._element)
 
 
+def _is_label_row(row):
+    """白/晚 之類的欄位標籤列（不是資料列，不可清空）。"""
+    txt = "".join(c.text for c in row.cells)
+    return ("白" in txt and "晚" in txt) and not any(ch.isdigit() for ch in txt)
+
+
 def blank_out_of_range_days(table, day_map, days_in_month):
+    """清掉超出當月天數的欄位內容，但**保留表頭**：
+    第 0 列（日期數字）與白/晚標籤列不動，否則表格會被永久破壞，
+    該份輸出若被存回去當範本，之後就再也認不出那是第幾天。"""
     if days_in_month is None:
         return
     out_of_range_cols = {col for day, col in day_map.items() if day > days_in_month}
     if not out_of_range_cols:
         return
-    for row in table.rows:
+    for ri, row in enumerate(table.rows):
+        if ri == 0 or _is_label_row(row):
+            continue
         for col_idx in out_of_range_cols:
             if col_idx < len(row.cells):
                 clear_cell(row.cells[col_idx])
@@ -211,6 +222,62 @@ def build_day_column_map(table):
     return day_map
 
 
+def _cell_groups(row):
+    """把一列依『同一個合併儲存格』分組，回傳 [(cell, [欄索引...]), ...]。"""
+    groups, last_tc = [], None
+    for ci, cell in enumerate(row.cells):
+        if last_tc is not None and cell._tc is last_tc:
+            groups[-1][1].append(ci)
+        else:
+            groups.append((cell, [ci]))
+            last_tc = cell._tc
+    return groups
+
+
+def restore_missing_day_headers(table, days_in_month):
+    """範本日期列最後幾格沒寫號碼時，依前面的規律補上（只補當月有效日）。
+
+    機構的空白表單常把第 31 格留白（手寫或排版使然），
+    導致程式認不出那是第 31 天、該欄永遠空著。
+    僅在「該格確實是日期欄」（寬度與其他日期欄相同、且白/晚標籤列對應位置
+    有班別標籤）時才補，避免誤寫到裝飾欄位。"""
+    if days_in_month is None or not table.rows:
+        return 0
+    groups = _cell_groups(table.rows[0])
+    numbered = [(i, int(c.text.strip())) for i, (c, _) in enumerate(groups)
+                if c.text.strip().isdigit()]
+    if not numbered:
+        return 0
+    last_i, last_day = numbered[-1]
+    width = len(groups[last_i][1])
+    label_row = next((r for r in table.rows if _is_label_row(r)), None)
+
+    added = 0
+    day = last_day
+    for gi in range(last_i + 1, len(groups)):
+        cell, cols = groups[gi]
+        if cell.text.strip():
+            break
+        if len(cols) != width:
+            break
+        if label_row is not None:
+            lab = "".join(label_row.cells[ci].text for ci in cols
+                          if ci < len(label_row.cells))
+            if "白" not in lab and "晚" not in lab:
+                break
+        day += 1
+        if day > days_in_month:
+            break
+        run = cell.paragraphs[0].add_run(str(day))
+        src = groups[last_i][0].paragraphs[0]
+        if src.runs:                      # 沿用既有日期的字型大小
+            run.font.size = src.runs[0].font.size
+            run.bold = src.runs[0].bold
+        cell.paragraphs[0].alignment = groups[last_i][0].paragraphs[0].alignment
+        added += 1
+    return added
+
+
 def set_cell_name(cell, name):
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     p = cell.paragraphs[0]
@@ -264,6 +331,8 @@ def fill(template_path, assignments_path, floor, output_path,
         roles = find_special_rows(table)
         if not roles:
             continue
+        if restore_missing_day_headers(table, days_in_month):
+            pass          # 範本尾端未編號的日期欄，已依當月天數補上號碼
         day_map = build_day_column_map(table)
         if not day_map:
             continue

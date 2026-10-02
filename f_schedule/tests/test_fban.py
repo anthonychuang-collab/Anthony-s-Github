@@ -578,6 +578,89 @@ def test_build_namecopy_passes_month_through():
     eq("第31欄填入護甲", d2.tables[0].rows[1].cells[31].text.strip(), "護甲")
 
 
+def _care_tpl_with_blank_last_day(path, n_cols=31, blank_last=True):
+    """造一個照護表範本：日期列 1..n，最後一欄可留白（模擬機構空白表單）。
+    另含白/晚標籤列，供日期欄判定。"""
+    from docx import Document
+    d = Document()
+    d.add_paragraph("115年   9 月      姓名:")
+    t = d.add_table(rows=3, cols=1 + n_cols)
+    t.rows[0].cells[0].text = "日期"
+    for day in range(1, n_cols + 1):
+        if blank_last and day == n_cols:
+            continue                      # 最後一格留白
+        t.rows[0].cells[day].text = str(day)
+    t.rows[1].cells[0].text = "班別"
+    for ci in range(1, n_cols + 1):
+        t.rows[1].cells[ci].text = "白 晚"
+    t.rows[2].cells[0].text = "責任護士 簽名"
+    d.save(path)
+    return path
+
+
+def test_restore_blank_last_day_header():
+    """迴歸：範本日期列最後一格留白（機構空白表單如此）時，
+    產 31 天的月份要把『31』補回去並填入姓名；30 天的月份則不可補。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    import sys as _sys, importlib, json
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    fcr = importlib.import_module("fill_care_record")
+
+    tpl = _care_tpl_with_blank_last_day(
+        _os.path.join(tempfile.gettempdir(), "tpl_blank31.docx"))
+    aj = _os.path.join(tempfile.gettempdir(), "asg_blank31.json")
+    with open(aj, "w", encoding="utf-8") as f:
+        json.dump({"2F": {str(x): {"白班護理": f"護{x}"} for x in range(1, 32)}},
+                  f, ensure_ascii=False)
+
+    out10 = _os.path.join(tempfile.gettempdir(), "blank31_10.docx")
+    fcr.fill(tpl, aj, "2F", out10, roc_year=115, month=10)
+    d10 = Document(out10)
+    eq("10月：第31欄日期補回", d10.tables[0].rows[0].cells[31].text.strip(), "31")
+    eq("10月：第31欄填入姓名", d10.tables[0].rows[2].cells[31].text.strip(), "護31")
+
+    out9 = _os.path.join(tempfile.gettempdir(), "blank31_9.docx")
+    fcr.fill(tpl, aj, "2F", out9, roc_year=115, month=9)
+    d9 = Document(out9)
+    eq("9月：第31欄不補日期", d9.tables[0].rows[0].cells[31].text.strip(), "")
+    eq("9月：第31欄不填姓名", d9.tables[0].rows[2].cells[31].text.strip(), "")
+    eq("9月：第30欄仍有姓名", d9.tables[0].rows[2].cells[30].text.strip(), "護30")
+
+
+def test_blank_out_of_range_keeps_headers():
+    """迴歸：清空越界日時不可動到日期列與白/晚標籤列。
+    否則產一次 30 天的月份就會把『31』與『白 晚』永久擦掉，
+    該輸出若被存回去當範本，之後就再也認不出那一欄。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    import sys as _sys, importlib, json
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    fcr = importlib.import_module("fill_care_record")
+
+    tpl = _care_tpl_with_blank_last_day(
+        _os.path.join(tempfile.gettempdir(), "tpl_full31.docx"), blank_last=False)
+    aj = _os.path.join(tempfile.gettempdir(), "asg_full31.json")
+    with open(aj, "w", encoding="utf-8") as f:
+        json.dump({"2F": {str(x): {"白班護理": f"護{x}"} for x in range(1, 32)}},
+                  f, ensure_ascii=False)
+    out = _os.path.join(tempfile.gettempdir(), "full31_9.docx")
+    fcr.fill(tpl, aj, "2F", out, roc_year=115, month=9)
+    d = Document(out)
+    eq("30天月份：日期『31』仍在", d.tables[0].rows[0].cells[31].text.strip(), "31")
+    check("30天月份：白/晚標籤仍在",
+          "白" in d.tables[0].rows[1].cells[31].text, d.tables[0].rows[1].cells[31].text)
+    eq("30天月份：第31欄姓名留白", d.tables[0].rows[2].cells[31].text.strip(), "")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
