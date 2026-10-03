@@ -180,3 +180,16 @@ def load(path="後台設定.xlsx"):
             if date and len(date) == 3:
                 cfg.holiday_dates[date] = str(d.get("名稱") or "").strip()
     return cfg
+
+
+def unknown_stamp_names(cfg):
+    """回傳 [(姓名, 核章人員)]：核章人員欄填了某個名字，但那個名字不在人員主檔裡。
+    核章人員應該是機構內真實存在的牌照持有人；指向查無此人者，幾乎都是
+    改名沒更新或當初填錯（例：洪瑞輝→王淑環），會讓文件印出不存在的同仁。"""
+    known = {p.name.strip() for p in cfg.people if p.name}
+    out = []
+    for p in cfg.people:
+        st = (p.stamp_name or "").strip()
+        if st and st not in known:
+            out.append((p.name, st))
+    return out

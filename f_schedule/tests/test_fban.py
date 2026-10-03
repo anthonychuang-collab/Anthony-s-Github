@@ -661,6 +661,81 @@ def test_blank_out_of_range_keeps_headers():
     eq("30天月份：第31欄姓名留白", d.tables[0].rows[2].cells[31].text.strip(), "")
 
 
+def test_new_day_cell_copies_row_formatting():
+    """迴歸：範本空白格（例未編號的第31欄）填入姓名時，字型/大小/顏色要跟同列其他日相同。
+    之前只設字型大小不設顏色，新建的 run 會變成預設黑色，整份只有 31 號是黑的。"""
+    try:
+        import docx
+    except Exception:
+        print("  ⏭ 略過（無 python-docx）"); return
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.oxml.ns import qn
+    import sys as _sys, importlib, json
+    _sys.path.insert(0, _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "docskills", "namecopy"))
+    fcr = importlib.import_module("fill_care_record")
+
+    # 範本：1..30 的姓名格已帶淺灰格式，第31欄日期與姓名格都是空的
+    d = Document()
+    d.add_paragraph("115年   9 月      姓名:")
+    t = d.add_table(rows=3, cols=32)
+    t.rows[0].cells[0].text = "日期"
+    for day in range(1, 31):
+        t.rows[0].cells[day].text = str(day)
+    t.rows[1].cells[0].text = "班別"
+    for ci in range(1, 32):
+        t.rows[1].cells[ci].text = "白 晚"
+    t.rows[2].cells[0].text = "責任護士 簽名"
+    for ci in range(1, 31):
+        r = t.rows[2].cells[ci].paragraphs[0].add_run("")
+        r.font.size = Pt(8); r.font.bold = True
+        r.font.color.rgb = RGBColor(0xAE, 0xAB, 0xAB)
+    tpl = _os.path.join(tempfile.gettempdir(), "tpl_fmt.docx"); d.save(tpl)
+    aj = _os.path.join(tempfile.gettempdir(), "asg_fmt.json")
+    with open(aj, "w", encoding="utf-8") as f:
+        json.dump({"2F": {str(x): {"白班護理": f"護{x}"} for x in range(1, 32)}},
+                  f, ensure_ascii=False)
+    out = _os.path.join(tempfile.gettempdir(), "fmt_out.docx")
+    fcr.fill(tpl, aj, "2F", out, roc_year=115, month=10)
+
+    d2 = Document(out)
+    row = d2.tables[0].rows[2]
+    def color_of(ci):
+        runs = row.cells[ci].paragraphs[0].runs
+        if not runs:
+            return None
+        rPr = runs[0]._element.find(qn("w:rPr"))
+        c = rPr.find(qn("w:color")) if rPr is not None else None
+        return c.get(qn("w:val")) if c is not None else None
+    eq("第30日有姓名", row.cells[30].text.strip(), "護30")
+    eq("第31日有姓名", row.cells[31].text.strip(), "護31")
+    eq("第30日顏色為範本的淺灰", color_of(30), "AEABAB")
+    eq("第31日顏色與第30日相同", color_of(31), color_of(30))
+    r30 = row.cells[30].paragraphs[0].runs[0]
+    r31 = row.cells[31].paragraphs[0].runs[0]
+    eq("第31日字級與第30日相同", r31.font.size, r30.font.size)
+    eq("第31日粗體與第30日相同", r31.font.bold, r30.font.bold)
+
+
+def test_unknown_stamp_name_detected():
+    """迴歸：核章人員指向主檔查無的人要被抓出來（會讓文件印出不存在的同仁）。"""
+    from fban import config as cfgmod
+    cfg = make_cfg(週起始星期=6)
+    cfg.people = [Person(name="甲員", block="護理"),
+                  Person(name="乙員", block="護理", stamp_name="查無此人"),
+                  Person(name="丙員", block="護理", stamp_name="甲員")]
+    bad = cfgmod.unknown_stamp_names(cfg)
+    eq("只抓出一筆", len(bad), 1)
+    eq("抓出的是乙員→查無此人", bad[0], ("乙員", "查無此人"))
+
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    cfgpath = _os.path.join(root, "後台設定.xlsx")
+    if _os.path.exists(cfgpath):
+        real = cfgmod.unknown_stamp_names(cfgmod.load(cfgpath))
+        check("實際後台設定無此問題", not real, str(real))
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

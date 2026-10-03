@@ -226,11 +226,17 @@ def docs_home():
                                error=f"只讀到 {len(converted)} 位人員（護理 {n_nurse} 位），"
                                      f"疑似欄位或月份分頁對不上，已中止以免產出空白表單。"
                                      f"請確認上傳檔含『{month}』分頁且版面正確。")
+    # 上傳的 F 班裡，「核章人員」欄若指向主檔查無的人，文件會印出不存在的同仁
+    known = {p.name.strip() for p in cfg.people if p.name}
+    bad = sorted({(p["name"], p["stamp"]) for p in converted
+                  if p.get("stamp") and p["stamp"].strip()
+                  and p["stamp"].strip() not in known})
     m = month.split(".")
     prev_night = _detect_prev_night(path, cfg, month)
     JOBS[token] = {"month": month, "converted": converted, "n_days": n_days,
                    "roc": int(m[0]), "mon": int(m[1]), "dir": job_dir,
-                   "out": path, "report": None, "prev_night": prev_night}
+                   "out": path, "report": None, "prev_night": prev_night,
+                   "warn_stamp": bad}
     return redirect(url_for("workflow", token=token))
 
 
@@ -274,7 +280,8 @@ def workflow(token):
         abort(404)
     return render_template("workflow.html", token=token, month=job["month"],
                            care_status=_care_tpl_status(),
-                           prev_night=job.get("prev_night", ""))
+                           prev_night=job.get("prev_night", ""),
+                           warn_stamp=job.get("warn_stamp") or [])
 
 
 @app.route("/make/restraint/<token>", methods=["POST"])

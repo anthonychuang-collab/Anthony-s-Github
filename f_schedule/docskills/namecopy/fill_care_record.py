@@ -4,6 +4,7 @@ import sys
 import json
 import argparse
 import re
+import copy
 import calendar
 import docx
 from docx.oxml.ns import qn
@@ -222,6 +223,33 @@ def build_day_column_map(table):
     return day_map
 
 
+def _clone_run_format(src_run, dst_run):
+    """把 src_run 的整套字元格式（rPr：顏色、字型、大小、粗體…）複製到 dst_run。
+    範本既有格子帶有機構設定的淺灰色，新建的 run 若只設字型大小會變成預設黑色，
+    所以一律從同列既有的日期格複製，確保每一天長得一樣。"""
+    if src_run is None or dst_run is None:
+        return False
+    src_rPr = src_run._element.find(qn("w:rPr"))
+    if src_rPr is None:
+        return False
+    dst = dst_run._element
+    old = dst.find(qn("w:rPr"))
+    if old is not None:
+        dst.remove(old)
+    dst.insert(0, copy.deepcopy(src_rPr))
+    return True
+
+
+def _first_formatted_run(row, from_col):
+    """在這一列的日期欄裡找一個帶格式的 run，當作新格子的格式範本。"""
+    for ci in range(from_col, len(row.cells)):
+        for p in row.cells[ci].paragraphs:
+            for r in p.runs:
+                if r._element.find(qn("w:rPr")) is not None:
+                    return r
+    return None
+
+
 def _cell_groups(row):
     """把一列依『同一個合併儲存格』分組，回傳 [(cell, [欄索引...]), ...]。"""
     groups, last_tc = [], None
@@ -270,15 +298,16 @@ def restore_missing_day_headers(table, days_in_month):
             break
         run = cell.paragraphs[0].add_run(str(day))
         src = groups[last_i][0].paragraphs[0]
-        if src.runs:                      # 沿用既有日期的字型大小
-            run.font.size = src.runs[0].font.size
-            run.bold = src.runs[0].bold
-        cell.paragraphs[0].alignment = groups[last_i][0].paragraphs[0].alignment
+        if src.runs:                      # 整套沿用既有日期欄的格式
+            _clone_run_format(src.runs[0], run)
+        cell.paragraphs[0].alignment = src.alignment
         added += 1
     return added
 
 
-def set_cell_name(cell, name):
+def set_cell_name(cell, name, ref_run=None):
+    """填入姓名。格子原本就有 run 時沿用其格式；是空格（例：範本未編號的第31欄）
+    則從 ref_run 複製整套格式，避免只有該欄變成黑色粗體。"""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     p = cell.paragraphs[0]
     for run in list(p.runs):
@@ -287,7 +316,9 @@ def set_cell_name(cell, name):
         p.runs[0].text = name
         set_run_font(p.runs[0])
     else:
-        set_run_font(p.add_run(name))
+        new_run = p.add_run(name)
+        if not _clone_run_format(ref_run, new_run):
+            set_run_font(new_run)
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for extra_p in cell.paragraphs[1:]:
         extra_p._element.getparent().remove(extra_p._element)
@@ -345,6 +376,7 @@ def fill(template_path, assignments_path, floor, output_path,
         for role, row_idx in roles.items():
             category = CATEGORY_BY_ROLE[role]
             row = table.rows[row_idx]
+            ref_run = _first_formatted_run(row, first_day_col)
             for ci in range(first_day_col, len(row.cells)):
                 clear_cell(row.cells[ci])
             for day, col_idx in day_map.items():
@@ -353,7 +385,7 @@ def fill(template_path, assignments_path, floor, output_path,
                 name = floor_data.get(str(day), {}).get(category)
                 if not name or col_idx >= len(row.cells):
                     continue
-                set_cell_name(row.cells[col_idx], name)
+                set_cell_name(row.cells[col_idx], name, ref_run=ref_run)
                 filled_days.add(day)
 
     d.save(output_path)
