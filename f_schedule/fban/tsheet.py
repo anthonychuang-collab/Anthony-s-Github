@@ -50,6 +50,25 @@ def _autopick_sheet(wb):
     return wb.sheetnames[-1]
 
 
+def _label_cols(ws, day_row, first_col, scan_rows=4):
+    """在日期欄左側找「姓名」「帳號」標題所在的欄。找不到回 (None, None)。
+    T 班版面不一定都是「姓名|帳號|日期…」，少一欄或多一欄都可能，
+    所以優先認標題文字，認不出來才退回固定位置。"""
+    name_col = acct_col = None
+    r0 = max(1, day_row - scan_rows + 1)
+    for r in range(r0, day_row + 1):
+        for c in range(1, first_col):
+            v = ws.cell(r, c).value
+            if not isinstance(v, str):
+                continue
+            t = v.strip()
+            if name_col is None and "姓名" in t:
+                name_col = c
+            elif acct_col is None and "帳號" in t:
+                acct_col = c
+    return name_col, acct_col
+
+
 def read(path, sheet=None):
     """回傳 dict：{ 'day_row','first_col','n_days','rows':[{name,account,days:{d:code}}] }
     sheet 留空或找不到時自動挑第一個含日期列的分頁。"""
@@ -58,8 +77,11 @@ def read(path, sheet=None):
         sheet = _autopick_sheet(wb)
     ws = wb[sheet]
     day_row, first_col, n_days = _find_day_header(ws)
-    name_col = first_col - 2
-    acct_col = first_col - 1
+    name_col, acct_col = _label_cols(ws, day_row, first_col)
+    if name_col is None:                       # 認不出標題，退回常見版面：日期欄往左兩格
+        name_col = max(1, first_col - 2)
+    if acct_col is None or acct_col == name_col:
+        acct_col = name_col + 1 if name_col + 1 < first_col else None
 
     people = []
     for r in range(day_row + 1, ws.max_row + 1):
@@ -71,7 +93,7 @@ def read(path, sheet=None):
         name = str(name).strip()
         if not name or name in ("姓名日期", "姓名"):
             continue
-        acct = ws.cell(r, acct_col).value
+        acct = ws.cell(r, acct_col).value if acct_col else None
         days = {}
         for d in range(1, n_days + 1):
             v = ws.cell(r, first_col + d - 1).value

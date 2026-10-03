@@ -786,6 +786,73 @@ def test_unknown_stamp_is_ignored_not_printed():
         eq("原始核章欄值仍保留供查核", conv[0]["stamp"], "查無此人乙")
 
 
+def test_tsheet_column_layout_variants():
+    """迴歸：T 班姓名/帳號欄改以標題辨識。少一欄、多一欄、順序顛倒都要讀得到。
+    （原本固定抓『日期欄往左兩格』，使用者一刪欄位就會整份讀不到或直接出錯。）"""
+    from fban import tsheet
+    from openpyxl import Workbook
+
+    def mk(path, labels):
+        wb = Workbook(); w = wb.active; w.title = "115-10"
+        name_c = None
+        for i, lab in enumerate(labels, start=1):
+            w.cell(3, i, lab)
+            if lab == "姓名":
+                name_c = i
+        first = len(labels) + 1
+        for d in range(1, 32):
+            w.cell(3, first + d - 1, d)
+        w.cell(4, name_c, "顏欣盈")
+        for d in range(1, 32):
+            w.cell(4, first + d - 1, "2Di")
+        wb.save(path)
+        return path
+
+    for tag, labels in (("姓名+帳號", ["姓名", "帳號"]),
+                        ("只有姓名", ["姓名"]),
+                        ("姓名+帳號+職稱", ["姓名", "帳號", "職稱"]),
+                        ("帳號在前", ["帳號", "姓名"])):
+        f = mk(_os.path.join(tempfile.gettempdir(), f"t_layout_{len(labels)}_{tag}.xlsx"), labels)
+        got = tsheet.read(f)
+        eq(f"{tag}：讀到1人", len(got["rows"]), 1)
+        eq(f"{tag}：姓名正確", got["rows"][0]["name"], "顏欣盈")
+        eq(f"{tag}：第1天班別", got["rows"][0]["days"][1], "2Di")
+
+
+def test_fban_without_stamp_column():
+    """迴歸：F 班若整欄刪掉「核章人員」（機構不使用人頭牌照時很自然），
+    上傳路徑仍須讀得到人員。該欄原本是辨認表頭的必要條件，刪掉會整份讀不到。"""
+    import openpyxl
+    cfg = make_cfg(週起始星期=6)
+    conv = [_mk_full("顏欣盈", "護理", "顏欣盈",
+                     {**{d: "D4x" for d in range(1, 32)},
+                      **{("fl", d): "2F" for d in range(1, 32)}}, cfg)]
+    tmp = _os.path.join(tempfile.gettempdir(), "F_stampcol.xlsx")
+    writer.write(conv, 31, cfg, tmp, "115.10")
+    base, _ = read_fban.load(tmp, cfg)
+    eq("原始檔讀得到", len(base), 1)
+
+    wb = openpyxl.load_workbook(tmp)
+    ws = wb[wb.sheetnames[0]]
+    col = None
+    for r in range(1, 8):
+        for c in range(1, 10):
+            if str(ws.cell(r, c).value).strip() == "核章人員":
+                col = c; break
+        if col:
+            break
+    check("找得到核章人員欄", col is not None, "")
+    if col is None:
+        return
+    ws.delete_cols(col)
+    tmp2 = _os.path.join(tempfile.gettempdir(), "F_nostampcol.xlsx")
+    wb.save(tmp2)
+    got, _ = read_fban.load(tmp2, cfg)
+    eq("刪掉核章人員欄後仍讀得到", len(got), 1)
+    eq("姓名正確", got[0]["name"], "顏欣盈")
+    eq("文件用名為本人", got[0]["record_name"], "顏欣盈")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

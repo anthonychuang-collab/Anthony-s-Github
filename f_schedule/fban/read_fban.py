@@ -171,7 +171,11 @@ def _header_cols(ws, r):
             cols["name"] = c
             cols["block"] = BLOCK_TITLES[v]
             cols["generic"] = (v == "人員")
-    if cols["stamp"] and cols["name"] and cols["block"]:
+    # 「核章人員」為選用欄：機構若不使用人頭牌照，可以整欄刪掉。
+    # 必要條件是認得出區塊名稱欄（姓名在其下方），再加上帳號／核章人員／班種
+    # 至少一個，以免把內文中剛好出現「護理人員」字樣的列誤判成表頭。
+    if cols["name"] and cols["block"] and (cols["stamp"] or cols["account"]
+                                           or cols["shift"]):
         return cols
     return None
 
