@@ -18,13 +18,16 @@
   <p class="lead">以剛完成的 <b>{{ month }} F 班</b> 為依據，自動把每日三班的核章姓名填入下列表單。</p>
   {% if warn_stamp %}
       <div style="background:#fff6e5;border:1px solid #f0c36d;border-radius:12px;padding:12px 14px;margin-bottom:12px">
-        <b>⚠ 核章人員查無此人</b>
+        <b>ℹ️ 上傳的 F 班帶有已失效的核章人員（文件不受影響）</b>
         <div style="font-size:13px;margin-top:6px">
-          下列同仁在 F 班的「核章人員」欄指向主檔中沒有的名字，<b>已自動忽略</b>，文件會印本人姓名：
+          下列名字<b>寫在你上傳的那份 F 班檔案裡</b>（它是在這些資料更正之前產生的），
+          不是來自現在的後台設定——<b>就算後台已經清空，這裡還是會出現</b>：
           <ul style="margin:6px 0 0 18px">
-          {% for nm, st in warn_stamp %}<li>{{ nm }} → 核章人員「{{ st }}」</li>{% endfor %}
+          {% for nm, st in warn_stamp %}<li>{{ nm }} 的核章人員欄寫著「{{ st }}」→ 已忽略，文件印「{{ nm }}」</li>{% endfor %}
           </ul>
-          文件不受影響，但後台仍有一筆資料要清：改名請把主檔姓名改成新名並清空該欄，誤填直接清空即可。
+          <b>文件已經是正確的，可以直接往下產出。</b>
+          想讓這個提示消失：回首頁用 T 班<b>重新產一次 {{ month }} F 班</b>（會以現在的後台設定重算），
+          再進這個工作流即可。
         </div>
       </div>
       {% endif %}
