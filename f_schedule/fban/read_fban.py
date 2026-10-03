@@ -178,6 +178,9 @@ def _header_cols(ws, r):
 
 def load(xlsx_path, cfg, month_label=None):
     """回傳 (converted, n_days)。"""
+    # 上傳檔的「核章人員」欄同樣只採信主檔裡真實存在的人；
+    # 舊檔殘留查無此人的名字時忽略它、改用名冊姓名。
+    known_names = {p.name.strip() for p in cfg.people if p.name}
     wb = openpyxl.load_workbook(xlsx_path)
     ws = _pick_sheet(wb, month_label)
     palette = _theme_palette(wb)
@@ -257,7 +260,8 @@ def load(xlsx_path, cfg, month_label=None):
                 "name": name,           # 名冊欄（護理人員/照服員）＝實際上班的同仁
                 # 下游文件一律印牌照持有人：有核章人員欄就用它，沒有就是本人。
                 # 與「T班→F班」那條路徑的 config.Person.record_name 語意一致。
-                "record_name": (str(stamp).strip() if stamp and str(stamp).strip()
+                "record_name": (str(stamp).strip()
+                                if stamp and str(stamp).strip() in known_names
                                 else name),
                 "stamp": (str(stamp).strip() if stamp else ""),  # 核章人員欄原值
                 "account": str(account or "").strip(),

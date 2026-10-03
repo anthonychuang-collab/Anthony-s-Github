@@ -51,6 +51,7 @@ class Config:
     exclude: set = field(default_factory=set)        # 排除人員（不出現在F班）
     month_quota: dict = field(default_factory=dict)  # {(民國年,月): {'實休','例','休','國','節日'}}
     holiday_dates: dict = field(default_factory=dict)  # {(民國年,月,日): 名稱}
+    ignored_stamps: list = field(default_factory=list)  # [(姓名, 已忽略的核章人員)]
 
     # --- 便利查詢 ---
     def person_by_name(self, name):
@@ -179,17 +180,23 @@ def load(path="後台設定.xlsx"):
             date = _parse_roc(d.get("民國年.月.日"))
             if date and len(date) == 3:
                 cfg.holiday_dates[date] = str(d.get("名稱") or "").strip()
+
+    # 核章人員必須是人員主檔裡真實存在的人。指向查無此人者（改名沒更新、或當初
+    # 填錯）一律忽略、改用本人姓名——寧可印本人，也不能把不存在的同仁印上稽核文件。
+    _known = {p.name.strip() for p in cfg.people if p.name}
+    for p in cfg.people:
+        st = (p.stamp_name or "").strip()
+        if st and st not in _known:
+            cfg.ignored_stamps.append((p.name, st))
+            p.stamp_name = ""
+
     return cfg
 
 
 def unknown_stamp_names(cfg):
-    """回傳 [(姓名, 核章人員)]：核章人員欄填了某個名字，但那個名字不在人員主檔裡。
-    核章人員應該是機構內真實存在的牌照持有人；指向查無此人者，幾乎都是
-    改名沒更新或當初填錯（例：洪瑞輝→王淑環），會讓文件印出不存在的同仁。"""
-    known = {p.name.strip() for p in cfg.people if p.name}
-    out = []
-    for p in cfg.people:
-        st = (p.stamp_name or "").strip()
-        if st and st not in known:
-            out.append((p.name, st))
-    return out
+    """回傳 [(姓名, 已忽略的核章人員)]。
+
+    核章人員應該是機構內真實存在的牌照持有人；指向查無此人者，幾乎都是改名沒更新
+    或當初填錯。這類值在 load() 時就已被忽略（文件會印本人姓名），此函式供報告與
+    畫面提示用，讓承辦知道後台還有一筆資料要清。"""
+    return list(cfg.ignored_stamps)

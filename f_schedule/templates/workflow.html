@@ -20,11 +20,11 @@
       <div style="background:#fff6e5;border:1px solid #f0c36d;border-radius:12px;padding:12px 14px;margin-bottom:12px">
         <b>⚠ 核章人員查無此人</b>
         <div style="font-size:13px;margin-top:6px">
-          下列同仁在 F 班的「核章人員」欄指向主檔中沒有的名字，文件會印出不存在的同仁：
+          下列同仁在 F 班的「核章人員」欄指向主檔中沒有的名字，<b>已自動忽略</b>，文件會印本人姓名：
           <ul style="margin:6px 0 0 18px">
           {% for nm, st in warn_stamp %}<li>{{ nm }} → 核章人員「{{ st }}」</li>{% endfor %}
           </ul>
-          若為改名，請把主檔姓名改成新名並清空該欄；若為誤填，清空即可，再重產 F 班。
+          文件不受影響，但後台仍有一筆資料要清：改名請把主檔姓名改成新名並清空該欄，誤填直接清空即可。
         </div>
       </div>
       {% endif %}

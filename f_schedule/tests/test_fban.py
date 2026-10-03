@@ -281,6 +281,8 @@ def test_readfban_roundtrip():
     ]
     tmp = _os.path.join(tempfile.gettempdir(), "test_rt_F.xlsx")
     writer.write(conv, 31, cfg, tmp, "115.08")
+    # 牌照持有人本人也要在人員主檔中，核章才會被採信（查無此人者一律忽略）
+    cfg.people.append(Person(name="持牌員", block="護理"))
     conv2, nd = read_fban.load(tmp, cfg)
     eq("讀回天數=31", nd, 31)
     eq("讀回人數=3", len([p for p in conv2 if p["block"] == "護理"]), 3)
@@ -389,6 +391,7 @@ def test_head_name_same_on_both_paths():
                       **{("fl", d): "2F" for d in range(1, 32)}}, cfg)]
     tmp = _os.path.join(tempfile.gettempdir(), "test_head_paths.xlsx")
     writer.write(conv, 31, cfg, tmp, "115.08")
+    cfg.people.append(Person(name="持牌員", block="護理"))
     conv2, _ = read_fban.load(tmp, cfg)
     p2 = next(x for x in conv2 if x["name"] == "借牌員")
     eq("路徑二 文件用名=持牌員", p2["record_name"], "持牌員")
@@ -719,21 +722,68 @@ def test_new_day_cell_copies_row_formatting():
 
 
 def test_unknown_stamp_name_detected():
-    """迴歸：核章人員指向主檔查無的人要被抓出來（會讓文件印出不存在的同仁）。"""
+    """核章人員的忽略清單：載入後台設定時記錄，供報告與畫面提示。
+    （行為面的驗證見 test_unknown_stamp_is_ignored_not_printed）"""
     from fban import config as cfgmod
-    cfg = make_cfg(週起始星期=6)
-    cfg.people = [Person(name="甲員", block="護理"),
-                  Person(name="乙員", block="護理", stamp_name="查無此人"),
-                  Person(name="丙員", block="護理", stamp_name="甲員")]
-    bad = cfgmod.unknown_stamp_names(cfg)
-    eq("只抓出一筆", len(bad), 1)
-    eq("抓出的是乙員→查無此人", bad[0], ("乙員", "查無此人"))
-
     root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     cfgpath = _os.path.join(root, "後台設定.xlsx")
-    if _os.path.exists(cfgpath):
-        real = cfgmod.unknown_stamp_names(cfgmod.load(cfgpath))
-        check("實際後台設定無此問題", not real, str(real))
+    if not _os.path.exists(cfgpath):
+        print("  ⏭ 略過(無後台設定.xlsx)"); return
+    cfg = cfgmod.load(cfgpath)
+    check("實際後台設定無查無此人的核章人員",
+          not cfgmod.unknown_stamp_names(cfg), str(cfgmod.unknown_stamp_names(cfg)))
+    check("清單與 ignored_stamps 一致",
+          cfgmod.unknown_stamp_names(cfg) == list(cfg.ignored_stamps), "")
+
+def test_unknown_stamp_is_ignored_not_printed():
+    """迴歸：核章人員指向主檔查無的人時，一律忽略、印本人姓名。
+    舊的後台設定或舊的 F 班殘留這種值（例：洪瑞輝→王淑環）時，
+    絕不可把不存在的同仁印到稽核文件上。"""
+    from fban import config as cfgmod
+    import openpyxl, shutil
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    cfgpath = _os.path.join(root, "後台設定.xlsx")
+    if not _os.path.exists(cfgpath):
+        print("  ⏭ 略過(無後台設定.xlsx)"); return
+
+    # 路徑一：後台設定殘留查無此人的核章人員
+    bad = _os.path.join(tempfile.gettempdir(), "cfg_badstamp.xlsx")
+    shutil.copy(cfgpath, bad)
+    wb = openpyxl.load_workbook(bad); ws = wb["人員主檔"]
+    hdr = [c.value for c in ws[1]]
+    i_name = hdr.index("姓名") + 1
+    i_stamp = hdr.index("核章人員(人頭牌照,留空=本人)") + 1
+    target_row = next(r for r in range(2, ws.max_row + 1) if ws.cell(r, i_name).value)
+    who = str(ws.cell(target_row, i_name).value).strip()
+    ws.cell(target_row, i_stamp, "查無此人甲")
+    wb.save(bad)
+    cfg = cfgmod.load(bad)
+    eq(f"{who} 文件用名為本人", cfg.person_by_name(who).record_name, who)
+    check("已記錄被忽略的核章人員",
+          (who, "查無此人甲") in cfg.ignored_stamps, str(cfg.ignored_stamps))
+    check("報告用的清單也看得到",
+          (who, "查無此人甲") in cfgmod.unknown_stamp_names(cfg), "")
+
+    # 路徑二：上傳的 F 班裡那一欄殘留查無此人
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill
+    good = cfgmod.load(cfgpath)
+    wb2 = Workbook(); ws2 = wb2.active; ws2.title = "115.10"
+    ws2.cell(3, 5, "台籍照服員")
+    for h, c in (("序", 1), ("帳號", 2), ("核章人員", 3), ("人員", 4), ("班種", 5)):
+        ws2.cell(4, c, h)
+    for d in range(1, 32):
+        ws2.cell(3, 5 + d, d)
+    ws2.cell(5, 1, 1); ws2.cell(5, 3, "查無此人乙"); ws2.cell(5, 4, "洪瑞輝")
+    fill = PatternFill("solid", fgColor="FFFF2F92")
+    for d in range(1, 32):
+        c = ws2.cell(5, 5 + d, "D5x"); c.fill = fill
+    fp = _os.path.join(tempfile.gettempdir(), "F_badstamp.xlsx"); wb2.save(fp)
+    conv, _ = read_fban.load(fp, good, "115.10")
+    check("讀到人員", bool(conv), "")
+    if conv:
+        eq("上傳路徑 文件用名為本人", conv[0]["record_name"], "洪瑞輝")
+        eq("原始核章欄值仍保留供查核", conv[0]["stamp"], "查無此人乙")
 
 
 def run():

@@ -83,9 +83,9 @@ def run(config_path, t_specs, out_path, report_path, month_label=None, fill=Fals
         lines.append(f"\n【主檔有列、但 T 班找不到姓名（未納入）】\n  " + "、".join(unmatched))
     bad_stamp = cfgmod.unknown_stamp_names(cfg)
     if bad_stamp:
-        lines.append("\n【⚠ 核章人員查無此人（文件會印出不存在的同仁，請檢查後台設定）】")
-        lines += [f"  ! {nm} 的核章人員「{st}」不在人員主檔中"
-                  f"（若為改名請把主檔姓名改成新名並清空此欄；若為誤填請清空）"
+        lines.append("\n【⚠ 核章人員查無此人（已忽略，文件印本人姓名）】")
+        lines += [f"  ! {nm} 的核章人員「{st}」不在人員主檔中，已忽略；"
+                  f"本次文件印「{nm}」。請到後台把該欄清空（改名者另把姓名改成新名）"
                   for nm, st in bad_stamp]
     if fill_log:
         lines.append("\n【補人頭時無法補足/少休情形】")
