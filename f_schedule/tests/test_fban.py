@@ -873,6 +873,40 @@ def test_pick_prefers_colored_small_night():
     eq("白色填滿亦視為非正式", data3[1]["2F"]["小夜"], "乙")
 
 
+def test_pick_priority_order_colored_then_non_head():
+    """責任護理的完整優先序（機構確認：護理長排正式班時就該由他簽）：
+
+        正式班非護理長 > 正式班護理長 > 代班非護理長 > 代班護理長
+
+    也就是**先看是不是正式班（有底色），同一層級內才避開護理長**。
+    `avoid_head` 不是硬性排除：護理長若排的是正式班，而其他人只是白底代班，
+    仍由護理長簽。此順序由 _pick() 的權重決定（有底色 +2、非護理長 +1），
+    改動權重就會改變它，所以在這裡鎖住。"""
+    from fban import docgen
+    C = "70AD47"          # 2F 正式白班底色
+
+    def mk(name, color, head=False):
+        return {"name": name, "record_name": name, "block": "護理", "is_head": head,
+                "n_days": 1,
+                "days": {1: {"code": "D4x", "cat": "D白", "floor": "2F",
+                             "color": color, "is_work": True}}}
+
+    def white(people):
+        return docgen.restraint_floor_data(people, 1)[1]["2F"]["白班"]
+
+    正式非長 = lambda: mk("正式非長", C)
+    正式長 = lambda: mk("正式長", C, True)
+    代班非長 = lambda: mk("代班非長", None)
+    代班長 = lambda: mk("代班長", None, True)
+
+    eq("正式班非護理長 勝 正式班護理長", white([正式長(), 正式非長()]), "正式非長")
+    eq("正式班護理長 勝 代班非護理長", white([代班非長(), 正式長()]), "正式長")
+    eq("正式班護理長 勝 代班護理長", white([代班長(), 正式長()]), "正式長")
+    eq("代班非護理長 勝 代班護理長", white([代班長(), 代班非長()]), "代班非長")
+    eq("只有護理長時仍由他簽", white([正式長()]), "正式長")
+    eq("只有代班護理長時仍填入", white([代班長()]), "代班長")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

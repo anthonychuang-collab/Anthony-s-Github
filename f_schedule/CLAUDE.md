@@ -58,7 +58,7 @@ tests/test_fban.py    自製零依賴測試（60項）
 - 例/休/國依〈年度行事曆〉每月配額；例假數嚴守配額，例假硬底線=每14天≥2。
 - 文件產生**不需 LibreOffice/字型**（標楷體於 Mac 開檔時算繪）。
 - 照護表範本存後台 `後台範本/照護表_{2F,3F,5F}.docx`（`/settings/templates` 維護），產文件時優先用後台範本，工作流當次上傳＝臨時覆蓋。約束表範本內建。
-- 上傳 F 班：`read_fban.load(path, cfg, month)` 依月份挑分頁；欄位靠標題（帳號/核章人員/區塊名/班種）自動對位；樓層由儲存格底色（含 theme color→RGB）比對後台〈樓層顏色規則〉。同日同樓層多位白班時，`docgen._pick(..., avoid_head=True)` 會跳過護理長（班種 D0，`read_fban.HEAD_KINDS`）取實際責任護士。
+- 上傳 F 班：`read_fban.load(path, cfg, month)` 依月份挑分頁；欄位靠標題（帳號/核章人員/區塊名/班種）自動對位；樓層由儲存格底色（含 theme color→RGB）比對後台〈樓層顏色規則〉。同日同樓層多位同班別護理時，`docgen._pick()` 以評分挑選：有正式班別底色 +2（`_colored()`：白底／無底色／FFFFFF 視為代班）、非護理長 +1（`avoid_head`，班種 D0，見 `read_fban.HEAD_KINDS`）。得出的優先序是 **正式班非護理長＞正式班護理長＞代班非護理長＞代班護理長**——先看是不是正式班，同層級內才避開護理長，所以**護理長排正式班時就由他簽**（機構確認）。改權重就會改變這個順序，`tests/test_pick_priority_order_colored_then_non_head` 鎖住它。
 - 每份文件同時輸出 PDF（`pdfexport`，soffice）。app 上傳路徑有低人數警告防呆。
 - 環境變數：`FBAN_PASSWORD`（存取密碼）、`FBAN_HOST`/`FBAN_PORT`、`FBAN_SECRET`。
 - 詳細規格見 `F班系統_規格書PRD.md`。
