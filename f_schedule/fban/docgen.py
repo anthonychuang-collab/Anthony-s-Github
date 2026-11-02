@@ -28,10 +28,19 @@ def _tw_aides(converted):
     return [p for p in converted if p["block"] == "台籍照服"]
 
 
+def _colored(info):
+    """該班是否有正式班別底色。白底／無底色＝非正式代班，挑責任人時不優先。"""
+    c = str(info.get("color") or "").upper()
+    if not c:
+        return False
+    return c[-6:] not in ("FFFFFF", "")
+
+
 def _pick(people, day, cat, floor=None, avoid_head=False):
-    """挑當日符合(班別大類, 樓層)的人；回傳核章姓名。
-    avoid_head=True 時，若同格有多位，優先跳過護理長(is_head)，除非只剩護理長。"""
-    fallback = ""
+    """挑當日符合(班別大類, 樓層)的人；回傳姓名。
+    以評分挑最佳：有正式班別底色 +2（橘色正式小夜 > 白底代班）、
+    非護理長 +1（avoid_head 時）。同分取名單在前者。"""
+    best, best_score = "", -1
     for p in people:
         info = p["days"].get(day, {})
         if not info.get("is_work"):
@@ -41,12 +50,12 @@ def _pick(people, day, cat, floor=None, avoid_head=False):
         if floor is not None and info.get("floor") != floor:
             continue
         nm = p.get("record_name") or p["name"]
-        if avoid_head and p.get("is_head"):
-            if not fallback:
-                fallback = nm
-            continue
-        return nm
-    return fallback
+        score = (2 if _colored(info) else 0) + (0 if (avoid_head and p.get("is_head")) else 1)
+        if score > best_score:
+            best, best_score = nm, score
+            if score == 3:
+                break
+    return best
 
 
 def institution_last_night(converted, n_days):

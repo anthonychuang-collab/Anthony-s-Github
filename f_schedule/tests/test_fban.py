@@ -853,6 +853,26 @@ def test_fban_without_stamp_column():
     eq("文件用名為本人", got[0]["record_name"], "顏欣盈")
 
 
+def test_pick_prefers_colored_small_night():
+    """同日多位小夜：取有正式底色(橘)的責任護理，白底代班只在沒別人時才用。"""
+    from fban import docgen
+
+    def mk(name, color):
+        return {"name": name, "record_name": name, "block": "護理", "is_head": False,
+                "n_days": 1,
+                "days": {1: {"code": "Ex", "cat": "E小夜", "floor": None,
+                             "color": color, "is_work": True}}}
+    # 白底代班(梁)排前、橘色正式小夜(洪)排後 → 應取洪靜玟
+    data = docgen.restraint_floor_data([mk("梁佳憶", None), mk("洪靜玟", "ED7D31")], 1)
+    eq("小夜取正式底色(橘)而非白底代班", data[1]["2F"]["小夜"], "洪靜玟")
+    # 只有白底代班時仍要填入(不留空)
+    data2 = docgen.restraint_floor_data([mk("梁佳憶", None)], 1)
+    eq("只有白底代班時仍填入", data2[1]["2F"]["小夜"], "梁佳憶")
+    # 白色填滿(FFFFFF)也視為非正式
+    data3 = docgen.restraint_floor_data([mk("甲", "FFFFFF"), mk("乙", "ED7D31")], 1)
+    eq("白色填滿亦視為非正式", data3[1]["2F"]["小夜"], "乙")
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
