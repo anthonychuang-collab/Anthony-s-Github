@@ -281,7 +281,8 @@ def workflow(token):
     return render_template("workflow.html", token=token, month=job["month"],
                            care_status=_care_tpl_status(),
                            prev_night=job.get("prev_night", ""),
-                           warn_stamp=job.get("warn_stamp") or [])
+                           warn_stamp=job.get("warn_stamp") or [],
+                           pdf_ok=pdfexport.available())
 
 
 @app.route("/make/restraint/<token>", methods=["POST"])
@@ -323,6 +324,7 @@ def make_namecopy(token):
     if not templates:
         return render_template("workflow.html", token=token, month=job["month"],
                                care_status=_care_tpl_status(), prev_night=job.get("prev_night", ""),
+                               pdf_ok=pdfexport.available(),
                                error="尚未設定任何樓層的照護表範本。請先到「後台範本設定」上傳，或在此當場上傳。")
     outdir = os.path.join(job["dir"], "namecopy")
     paths = docgen.build_namecopy(job["converted"], job["n_days"], job["roc"], job["mon"], templates, outdir)
@@ -331,6 +333,7 @@ def make_namecopy(token):
     if not paths:
         return render_template("workflow.html", token=token, month=job["month"],
                                care_status=_care_tpl_status(), prev_night=job.get("prev_night", ""),
+                               pdf_ok=pdfexport.available(),
                                error="產出失敗：範本結構可能與預期不符")
     return _zip_files(paths, f"{job['month']}_住民日常生活照護表.zip")
 

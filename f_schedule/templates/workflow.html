@@ -16,6 +16,19 @@
 <div class="wrap" style="max-width:820px">
   <h1 style="color:var(--forest)">📄 {{ month }} 產出下游文件</h1>
   <p class="lead">以剛完成的 <b>{{ month }} F 班</b> 為依據，自動把每日三班的核章姓名填入下列表單。</p>
+  {% if not pdf_ok %}
+  <div style="background:#fff6e5;border:1px solid #f0c36d;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+    <b>ℹ️ 這台主機尚未安裝 LibreOffice，文件只會輸出 Word（不會有 PDF）</b>
+    <div style="font-size:13px;margin-top:6px">
+      PDF 是「定版」用的（避免換電腦開啟時版面跑掉），由主機的 LibreOffice 轉檔，<b>免費、離線</b>。
+      沒有它不影響 Word 的內容與正確性。<br>
+      要啟用：到 <a href="https://zh-tw.libreoffice.org/download/" target="_blank" rel="noopener">zh-tw.libreoffice.org/download</a>
+      下載安裝（一路按繼續即可），或在終端機執行
+      <code style="background:#f3f3f0;padding:1px 5px;border-radius:4px">brew install --cask libreoffice</code>。
+      裝好後<b>重新啟動本系統</b>，這段提示會消失，之後每份文件都會自動附 PDF。
+    </div>
+  </div>
+  {% endif %}
   {% if warn_stamp %}
       <div style="background:#fff6e5;border:1px solid #f0c36d;border-radius:12px;padding:12px 14px;margin-bottom:12px">
         <b>ℹ️ 上傳的 F 班帶有已失效的核章人員（文件不受影響）</b>
@@ -37,7 +50,7 @@
     <p style="font-size:13.5px;color:var(--sub);margin:4px 0 14px">
       2F / 3F / 5F 各一份 Word，日期與年月已填，每 2 小時時段簽名欄以淺灰色預填當班護理核章姓名
       （前 4 列大夜、中 4 列白班、後 4 列小夜）。範本已內建，直接產出即可。
-      每份會同時附一份 <b>PDF（定版，避免換電腦開啟時版面跑掉）</b>。</p>
+      {% if pdf_ok %}每份會同時附一份 <b>PDF（定版，避免換電腦開啟時版面跑掉）</b>。{% else %}<b>本機未安裝 LibreOffice，本次只會輸出 Word。</b>{% endif %}</p>
     <form method="post" action="/make/restraint/{{ token }}">
       <div style="background:#f6f8f4;border-radius:12px;padding:12px 14px;margin-bottom:12px">
         <label class="fld" style="font-size:13.5px">上月最後一天（前一日）大夜護理　<span class="hint">．供本月 1 日凌晨大夜格</span></label>
@@ -48,7 +61,7 @@
           {% if prev_night %}已自動由上月分頁帶入「{{ prev_night }}」，可修改。{% else %}上傳檔若含上月分頁會自動帶入；沒有請手動填。{% endif %}
         </div>
       </div>
-      <button type="submit" style="max-width:280px">產出約束評估記錄單（Word＋PDF）</button>
+      <button type="submit" style="max-width:280px">產出約束評估記錄單（{% if pdf_ok %}Word＋PDF{% else %}僅 Word{% endif %}）</button>
     </form>
   </div>
   <div class="card">
@@ -84,7 +97,7 @@
           {% endfor %}
         </div>
       </details>
-      <button type="submit" style="max-width:340px;margin-top:6px">產出住民日常生活照護表（Word＋PDF）</button>
+      <button type="submit" style="max-width:340px;margin-top:6px">產出住民日常生活照護表（{% if pdf_ok %}Word＋PDF{% else %}僅 Word{% endif %}）</button>
     </form>
     <a href="/settings/templates" style="display:inline-block;margin-top:12px;font-size:13px;color:var(--forest)">⚙️ 後台範本設定（換範本 / 新增樓層）→</a>
   </div>

@@ -907,6 +907,41 @@ def test_pick_priority_order_colored_then_non_head():
     eq("只有代班護理長時仍填入", white([代班長()]), "代班長")
 
 
+def test_workflow_page_states_pdf_availability():
+    """迴歸：主機沒裝 LibreOffice 時，工作流頁面不可再宣稱「Word＋PDF」。
+    使用者下載後只看到 Word、不知原因，按鈕卻寫著會附 PDF。"""
+    import importlib, re
+    _os.environ["FBAN_PASSWORD"] = "t"
+    try:
+        app = importlib.import_module("app")
+    except Exception as e:
+        print(f"  ⏭ 略過（無法載入 app：{e}）"); return
+    from fban import pdfexport
+    c = app.app.test_client()
+    c.post("/login", data={"password": "t"})
+    app.JOBS["testtoken001"] = {"month": "115.11", "converted": [], "n_days": 30,
+                                "roc": 115, "mon": 11, "dir": tempfile.gettempdir(),
+                                "out": "", "report": None, "prev_night": "",
+                                "warn_stamp": []}
+    orig = pdfexport.available
+    try:
+        pdfexport.available = lambda: True
+        html = c.get("/workflow/testtoken001").get_data(as_text=True)
+        check("有 LibreOffice：按鈕寫 Word＋PDF", "Word＋PDF" in html, "")
+        check("有 LibreOffice：不顯示未安裝提示", "尚未安裝 LibreOffice" not in html, "")
+
+        pdfexport.available = lambda: False
+        html = c.get("/workflow/testtoken001").get_data(as_text=True)
+        check("沒有 LibreOffice：按鈕改寫『僅 Word』", "僅 Word" in html, "")
+        check("沒有 LibreOffice：不再宣稱 Word＋PDF", "Word＋PDF" not in html, "")
+        check("沒有 LibreOffice：顯示安裝說明", "尚未安裝 LibreOffice" in html, "")
+        check("安裝說明含 brew 指令",
+              "brew install --cask libreoffice" in html, "")
+    finally:
+        pdfexport.available = orig
+        app.JOBS.pop("testtoken001", None)
+
+
 def run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
